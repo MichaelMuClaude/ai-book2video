@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +20,7 @@ CAPTURE = HERE / "capture.mjs"
 FPS = 30
 MIN_SCENE_SECONDS = 4.0
 TAIL_SECONDS = 0.8
+DEFAULT_JOBS = max(1, min(8, (os.cpu_count() or 4) // 4))  # scenes rendered at the same time
 
 
 @dataclass
@@ -108,6 +111,7 @@ def build(
     only: set[int] | None = None,
     subtitles_file: bool = True,
     keep_frames: bool = False,
+    jobs: int = DEFAULT_JOBS,
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
@@ -128,6 +132,7 @@ def build(
     cursor = 0.0
     if tts == "kokoro":
         speech.kokoro_batch([(scene.narration, audio_dir / f"scene{scene.index:03d}.wav") for scene in scenes], voice=voice)
+    jobs_list = []
     for scene in scenes:
         wav = audio_dir / f"scene{scene.index:03d}.wav"
         if tts != "kokoro":
@@ -140,19 +145,28 @@ def build(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter),
             encoding="utf-8",
         )
+        clip = clips_dir / f"scene{scene.index:03d}.mp4"
+        jobs_list.append((scene, page, wav, seconds, clip))
+        clip_paths.append(clip)
+        timings.append(SceneTiming(scene.index, round(spoken, 2), round(seconds, 2), round(cursor, 2)))
+        cues.extend(subtitles.Cue(cue.start + cursor, cue.end + cursor, cue.text, cue.zh) for cue in local_cues)
+        cursor += seconds
+
+    def render(job) -> None:
+        scene, page, wav, seconds, clip = job
         frames_dir = workdir / "frames" / f"scene{scene.index:03d}"
         if frames_dir.exists():
             shutil.rmtree(frames_dir)
         times = [i / FPS for i in range(max(1, round(seconds * FPS)))]
         capture_frames(page, frames_dir, times)
-        clip = clips_dir / f"scene{scene.index:03d}.mp4"
         encode_scene(frames_dir, wav, seconds, clip)
         if not keep_frames:
             shutil.rmtree(frames_dir, ignore_errors=True)
-        clip_paths.append(clip)
-        timings.append(SceneTiming(scene.index, round(spoken, 2), round(seconds, 2), round(cursor, 2)))
-        cues.extend(subtitles.Cue(cue.start + cursor, cue.end + cursor, cue.text, cue.zh) for cue in local_cues)
-        cursor += seconds
+
+    # Each scene is captured by its own headless Chrome (own profile, own port), so scenes render in parallel.
+    with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+        for future in [pool.submit(render, job) for job in jobs_list]:
+            future.result()
     out.parent.mkdir(parents=True, exist_ok=True)
     join_clips(clip_paths, out, workdir)
     srt = out.with_suffix(".srt")

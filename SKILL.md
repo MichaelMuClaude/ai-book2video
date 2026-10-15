@@ -35,7 +35,7 @@ ai-book2video build chapter.script.json -o chapter.mp4 # render (Kokoro voice by
    - The last scene is a `title` credit: `"heading": "Based on"`, with the book title and author in `body`, and a one-sentence narration saying the video is based on it.
 6. **Validate.** Fix every error. A sentence-count mismatch means a narration and its translation do not pair.
 7. **Preview and look.** Run `preview` and read the frames. Check: labels do not overlap (keep actors at least 400 apart on the 0–1920 scale, use short labels), bursts sit above heads (`y` about 500–700), speech bubbles stay in the frame, nothing important is hidden by the caption box at the bottom.
-8. **Build** in the background (a full chapter takes about 15 minutes) and check the result: duration, `manifest.json`, and a few frames taken with `ffmpeg -ss <t> -i out.mp4 -frames:v 1 frame.jpg` around the timed moments.
+8. **Build** in the background (scenes render in parallel with `--jobs`; a full chapter takes about 5 minutes on 32 cores, longer on smaller machines) and check the result: duration, `manifest.json`, and a few frames taken with `ffmpeg -ss <t> -i out.mp4 -frames:v 1 frame.jpg` around the timed moments.
 9. **Deliver.** Report the length, number of scenes and file paths. If the user keeps books in one folder per book, put the MP4 and SRT next to the book.
 
 ## Script format
@@ -68,7 +68,8 @@ ai-book2video build chapter.script.json -o chapter.mp4 # render (Kokoro voice by
 - **Actions:** `stand`, `walk` (`to`, `at`, `dur`), `fall` (`at`; the face turns `hurt`), `talk` (arm and mouth move), `wave`.
 - **Faces:** `neutral`, `happy`, `sad`, `surprised`, `hurt`, changed over time with `faces`.
 - **Speech bubbles:** `"say": [{"text": "I'm alive!", "at": "s3", "dur": 2.5}]`. Keep them to a few words.
-- **Props:** `car` (moves with `to`, `at`, `dur`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`, `dur`).
+- **Props:** `car` and `train` (move with `to`, `at`, `dur`; `"armoured": true` makes a grey train), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`, `dur`), `letter` (floats at `y`, can fly with `to`), `clock` (hands turn `spin` times over `dur` from `at`), `wall` (`w`, `h`), `crate` (`text` label), `chair`, `easel`.
+- **Backgrounds:** `street`, `field`, `room`, `plain`, `night` (dark sky, stars and moon).
 - **Timing:** seconds, or `"s2"` / `"s2+0.5"` / `"s3-1"` for a sentence start plus an offset. To make a moving car hit someone exactly on a sentence, start it about half its travel time earlier (`"at": "s2-1.2"` with `"dur": 2.4`).
 - **Camera:** on by default; every sentence is a new shot. Set `"camera": false` on a stage for a still scene.
 - Other kinds (`title`, `text`, `bullets`, `quote`, `stat`) exist for credits and key points; use them sparingly.

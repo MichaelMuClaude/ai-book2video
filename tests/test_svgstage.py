@@ -59,6 +59,23 @@ class StagePageTests(unittest.TestCase):
         anims = json.loads(re.search(r"const ANIMS = (\[.*?\]); const INIT", page, re.S).group(1))
         self.assertEqual({a["id"] for a in anims} - elements, set())
 
+    def test_new_props_render_and_animate(self):
+        stage = {
+            "background": "night",
+            "props": [{"type": "train", "x": -400, "to": 2400, "at": "s1", "dur": 4, "armoured": True},
+                      {"type": "letter", "x": 300, "to": 900, "at": "s2", "dur": 1},
+                      {"type": "clock", "x": 960, "spin": 3, "at": 0, "dur": 5},
+                      {"type": "wall", "x": 1500}, {"type": "crate", "x": 400, "text": "WHISKY"}, {"type": "chair", "x": 1200}],
+        }
+        page = self.page(stage)
+        self.assertIn("#1e1b4b", page)
+        self.assertIn("WHISKY", page)
+        elements = set(re.findall(r'data-id="([^"]+)"', page))
+        anims = json.loads(re.search(r"const ANIMS = (\[.*?\]); const INIT", page, re.S).group(1))
+        self.assertEqual({a["id"] for a in anims} - elements, set())
+        spins = [a for a in anims if a["id"] == "sp2-m" and a["p"] == "r"]
+        self.assertEqual(spins[0]["to"], 1080)
+
     def test_fall_lands_on_its_sentence(self):
         page = self.page({"actors": [{"x": 900, "action": "fall", "at": "s2"}]})
         anims = json.loads(re.search(r"const ANIMS = (\[.*?\]); const INIT", page, re.S).group(1))

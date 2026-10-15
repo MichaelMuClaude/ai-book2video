@@ -107,6 +107,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         only=parse_scenes(args.scenes),
         subtitles_file=not args.no_subtitles,
         keep_frames=args.keep_frames,
+        jobs=args.jobs,
     )
     minutes, seconds = divmod(manifest["seconds"], 60)
     print(f"wrote {out}  ({int(minutes)} min {seconds:04.1f} s, {len(manifest['scenes'])} scenes)")
@@ -178,6 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="output .mp4")
     p.add_argument("--work", help="working folder (default: the output name without .mp4)")
     p.add_argument("--keep-frames", action="store_true", help="keep the captured frame images in the working folder")
+    p.add_argument("--jobs", type=int, default=video.DEFAULT_JOBS,
+                   help=f"scenes to render at the same time (default {video.DEFAULT_JOBS} on this machine)")
     p.add_argument("--tts", default="kokoro", choices=speech.BACKENDS, help="narration engine (kokoro is the default)")
     p.add_argument("--voice", default=None, help="voice: af_heart (Kokoro, default), or an espeak voice such as en-us")
     p.add_argument("--rate", type=int, default=165, help="espeak words per minute")

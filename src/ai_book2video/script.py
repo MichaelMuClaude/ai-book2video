@@ -28,6 +28,8 @@ from ai_book2video.errors import Book2VideoError
 from ai_book2video.text import count_words
 
 KINDS = ("title", "text", "bullets", "quote", "stat", "stage")
+PROPS = ("car", "train", "tree", "sun", "fire", "building", "podium", "book", "burst", "letter", "clock", "wall", "crate", "chair", "easel")
+BACKGROUNDS = ("street", "field", "room", "plain", "night")
 WORDS_PER_MINUTE = 150
 MAX_NARRATION_WORDS = 220
 WARN_NARRATION_WORDS = 170
@@ -142,10 +144,10 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
                     if not isinstance(actor, dict) or actor.get("action", "stand") not in ("stand", "walk", "fall", "talk", "wave"):
                         errors.append(f"{where}: actor action must be stand, walk, fall, talk or wave")
                 for prop in stage.get("props", []):
-                    if not isinstance(prop, dict) or prop.get("type") not in ("car", "tree", "sun", "fire", "building", "podium", "book", "burst"):
-                        errors.append(f"{where}: prop type must be car, tree, sun, fire, building, podium, book or burst")
-                if stage.get("background", "plain") not in ("street", "field", "room", "plain"):
-                    errors.append(f"{where}: background must be street, field, room or plain")
+                    if not isinstance(prop, dict) or prop.get("type") not in PROPS:
+                        errors.append(f"{where}: prop type must be one of {', '.join(PROPS)}")
+                if stage.get("background", "plain") not in BACKGROUNDS:
+                    errors.append(f"{where}: background must be one of {', '.join(BACKGROUNDS)}")
         if kind == "stat":
             if not isinstance(scene.get("value"), (int, float)) or isinstance(scene.get("value"), bool):
                 errors.append(f"{where}: 'stat' scenes need a numeric 'value' taken from the source")

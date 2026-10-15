@@ -3,7 +3,7 @@
 Turn a book chapter (or any Markdown document) into a fun, animated, narrated **portrait MP4** for phones.
 
 - **9:16 video** (1080 × 1920), ready for short-video apps.
-- **Animated stick-figure stage** drawn in SVG: colourful crayon-textured backgrounds, round-headed characters with faces (happy, sad, surprised, hurt), blinking, breathing, walking, falling, talking, speech bubbles, impact bursts and props (cars, trees, sun, fire, buildings, books, podiums).
+- **Animated stick-figure stage** drawn in SVG: colourful crayon-textured backgrounds, round-headed characters with faces (happy, sad, surprised, hurt), blinking, breathing, walking, falling, talking, speech bubbles, impact bursts and props (cars, trains, trees, sun, fire, buildings, books, podiums, letters, clocks, walls, crates, chairs, easels).
 - **A camera that cuts on every sentence** (wide, medium, close-up) and drifts, so the picture never sits still.
 - **Actions land on the words**: an action can be timed to a narration sentence (`"at": "s2"`), so the car hits exactly when the narrator says it does.
 - **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
@@ -89,19 +89,19 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 
 | Field | Values |
 |---|---|
-| `background` | `street`, `field`, `room`, `plain`; `"split": true` adds two colour blocks |
+| `background` | `street`, `field`, `room`, `plain`, `night`; `"split": true` adds two colour blocks |
 | actor `action` | `stand`, `walk` (with `to`, `at`, `dur`), `fall` (at `at`), `talk`, `wave` |
 | actor `face` / `faces` | `neutral`, `happy`, `sad`, `surprised`, `hurt`; `faces` changes the face over time |
 | actor `say` | speech bubbles: `[{"text": "...", "at": "s2", "dur": 2.5}]` |
 | actor `label`, `colour` | a short name above the head; a body colour |
-| prop `type` | `car` (moves with `to`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`) |
+| prop `type` | `car`, `train` (move with `to`; `armoured`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`), `letter` (`y`, `to`), `clock` (`spin`, `at`, `dur`), `wall` (`w`, `h`), `crate` (`text`), `chair`, `easel` |
 | `camera` | `true` by default: a new shot on every sentence |
 
 `x` positions are on a 0–1920 scale across the stage (they are fitted to the portrait frame); keep actors between about 250 and 1650. `y` is in pixels from the top. Times are seconds, or a sentence reference: `"s2"` is the start of sentence 2, `"s2+0.5"` half a second later.
 
 ## Output
 
-`build` writes the MP4 and an SRT file next to it, plus a working folder with the pages, audio, clips and `manifest.json` (scene timings). Rendering uses headless Chrome to capture every frame, about 2–3 seconds of compute per second of video. A 5-minute chapter takes about 15 minutes and is about 250 MB.
+`build` writes the MP4 and an SRT file next to it, plus a working folder with the pages, audio, clips and `manifest.json` (scene timings). Rendering uses headless Chrome to capture every frame. Scenes render in parallel (`--jobs`, default: a quarter of the CPU cores, at most 8), each in its own Chrome, and the clips are then joined in order. On a 32-core machine a 9-minute chapter renders in about 5 minutes; one scene at a time it takes about 3 seconds of compute per second of video. Files are about 45 MB per minute.
 
 ## Copyright
 

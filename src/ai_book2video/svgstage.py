@@ -100,10 +100,16 @@ def background(kind: str, palette: dict, split: bool = False) -> str:
     elif kind == "field":
         parts.append(f'<ellipse cx="200" cy="{GROUND + 40}" rx="760" ry="300" fill="#22c55e" opacity="0.55"/>')
         parts.append(f'<ellipse cx="900" cy="{GROUND + 60}" rx="760" ry="280" fill="#16a34a" opacity="0.55"/>')
+    elif kind == "night":
+        parts[0] = f'<rect x="{-pad}" y="{-pad}" width="{WIDTH + 2 * pad}" height="{HEIGHT + 2 * pad}" fill="#1e1b4b"/>'
+        for sx, sy in ((90, 180), (300, 90), (520, 240), (760, 130), (980, 300), (180, 520), (640, 470), (900, 640), (420, 700)):
+            parts.append(f'<circle cx="{sx}" cy="{sy}" r="7" fill="#fef9c3"/>')
+        parts.append(f'<circle cx="820" cy="300" r="80" fill="#fef9c3" stroke="{INK}" stroke-width="7"/>')
+        parts.append(f'<circle cx="852" cy="276" r="72" fill="#1e1b4b"/>')
     elif kind == "room":
         parts.append(f'<rect x="{WIDTH // 2 - 320}" y="260" width="640" height="{GROUND - 260}" rx="18" fill="{accent}" opacity="0.35" stroke="{INK}" stroke-width="6"/>')
         parts.append(f'<rect x="{WIDTH // 2 - 160}" y="380" width="320" height="260" rx="14" fill="#bae6fd" stroke="{INK}" stroke-width="6"/>')
-    ground_colour = "#8b5a2b" if kind in ("field", "plain") else "#6b7280"
+    ground_colour = {"field": "#8b5a2b", "plain": "#8b5a2b", "night": "#312e81"}.get(kind, "#6b7280")
     parts.append(f'<rect x="{-pad}" y="{GROUND}" width="{WIDTH + 2 * pad}" height="{HEIGHT - GROUND + pad}" fill="{ground_colour}" opacity="0.75"/>')
     return f'<g filter="url(#crayon)">{"".join(parts)}</g>'
 
@@ -153,6 +159,30 @@ def prop(prefix: str, index: int, spec: dict, palette: dict, tl, cues: list) -> 
         h = int(spec.get("h", 400))
         return (f'<g data-id="{gid}"><rect x="{x0:.0f}" y="{GROUND - h}" width="{w}" height="{h}" rx="10" '
                 f'fill="{palette["card"]}" opacity="0.55" stroke="{INK}" stroke-width="6"/></g>')
+    if kind == "letter":
+        y = y0 if y0 else GROUND - 560
+        lines = "".join(f'<line x1="-44" y1="{ly}" x2="44" y2="{ly}" stroke="{INK}" stroke-width="5" stroke-linecap="round" opacity="0.6"/>'
+                        for ly in (-36, -12, 12, 36))
+        _move(gid, x0, spec, cues, tl)
+        return (f'<g data-id="{gid}"><g transform="translate(0 {y:.0f})"><g data-float="10,1.6,{index}" data-id="{gid}-f">'
+                f'<rect x="-70" y="-90" width="140" height="180" rx="10" fill="#fffbeb" stroke="{INK}" stroke-width="7"/>{lines}'
+                f'</g></g></g>')
+    if kind == "clock":
+        y = y0 if y0 else GROUND - 820
+        turns = float(spec.get("spin", 1))
+        at = when(spec.get("at"), cues)
+        dur = float(spec.get("dur", 6))
+        ticks = "".join(f'<line x1="0" y1="-78" x2="0" y2="-94" stroke="{INK}" stroke-width="7" stroke-linecap="round" transform="rotate({a})"/>'
+                        for a in range(0, 360, 30))
+        tl.start(f"{gid}-m", r=0)
+        tl.start(f"{gid}-h", r=0)
+        tl.add(f"{gid}-m", "r", 360 * turns, at, dur, "linear", frm=0)
+        tl.add(f"{gid}-h", "r", 30 * turns, at, dur, "linear", frm=0)
+        return (f'<g data-id="{gid}"><g transform="translate({x0:.0f} {y:.0f})">'
+                f'<circle r="110" fill="#fffbeb" stroke="{INK}" stroke-width="9"/>{ticks}'
+                f'<path data-id="{gid}-h" d="M0,0 L0,-50" stroke="{INK}" stroke-width="12" stroke-linecap="round" style="{_fill_box("50% 100%")}"/>'
+                f'<path data-id="{gid}-m" d="M0,0 L0,-80" stroke="#ef4444" stroke-width="8" stroke-linecap="round" style="{_fill_box("50% 100%")}"/>'
+                f'<circle r="10" fill="{INK}"/></g></g>')
     if kind == "car":
         moving = spec.get("to") is not None
         lines = "".join(
@@ -168,6 +198,55 @@ def prop(prefix: str, index: int, spec: dict, palette: dict, tl, cues: list) -> 
             + f'<circle cx="-80" cy="-40" r="38" fill="{INK}"/><circle cx="80" cy="-40" r="38" fill="{INK}"/>'
             + f'<circle cx="-80" cy="-40" r="14" fill="#e5e7eb"/><circle cx="80" cy="-40" r="14" fill="#e5e7eb"/>'
         )
+    elif kind == "train":
+        moving = spec.get("to") is not None
+        body = spec.get("colour") or ("#6b7280" if spec.get("armoured") else "#ef4444")
+        lines = "".join(
+            f'<line x1="-760" y1="{y}" x2="-640" y2="{y}" stroke="{INK}" stroke-width="9" stroke-linecap="round" opacity="0.55"/>'
+            for y in (-220, -160, -100)
+        ) if moving else ""
+        cars = ""
+        for cx in (-560, -330):
+            cars += (f'<rect x="{cx}" y="-240" width="210" height="180" rx="14" fill="{body}" stroke="{INK}" stroke-width="8"/>'
+                     f'<rect x="{cx + 30}" y="-210" width="60" height="50" rx="6" fill="#e0f2fe" stroke="{INK}" stroke-width="5"/>'
+                     f'<rect x="{cx + 120}" y="-210" width="60" height="50" rx="6" fill="#e0f2fe" stroke="{INK}" stroke-width="5"/>'
+                     f'<circle cx="{cx + 45}" cy="-40" r="30" fill="{INK}"/><circle cx="{cx + 165}" cy="-40" r="30" fill="{INK}"/>'
+                     f'<line x1="{cx + 210}" y1="-90" x2="{cx + 230}" y2="-90" stroke="{INK}" stroke-width="10"/>')
+        puffs = "".join(f'<circle data-id="{gid}-puff{i}" data-float="{14 + 6 * i},{1.2 + 0.3 * i},{i}" cx="{60 - 50 * i}" cy="{-380 - 70 * i}" '
+                        f'r="{34 + 12 * i}" fill="#e5e7eb" stroke="{INK}" stroke-width="6" opacity="0.9"/>' for i in range(3))
+        inner = (
+            lines + cars + puffs
+            + f'<rect x="-100" y="-260" width="200" height="200" rx="16" fill="{body}" stroke="{INK}" stroke-width="8"/>'
+            + f'<rect x="100" y="-180" width="110" height="120" rx="20" fill="{body}" stroke="{INK}" stroke-width="8"/>'
+            + f'<rect x="30" y="-330" width="44" height="80" rx="8" fill="{INK}"/>'
+            + f'<rect x="-70" y="-230" width="80" height="60" rx="8" fill="#fde68a" stroke="{INK}" stroke-width="5"/>'
+            + f'<circle cx="-50" cy="-40" r="40" fill="{INK}"/><circle cx="60" cy="-40" r="40" fill="{INK}"/><circle cx="170" cy="-40" r="30" fill="{INK}"/>'
+            + f'<circle cx="-50" cy="-40" r="14" fill="#e5e7eb"/><circle cx="60" cy="-40" r="14" fill="#e5e7eb"/>'
+        )
+    elif kind == "wall":
+        h = int(spec.get("h", 420))
+        w = int(spec.get("w", 260))
+        bricks = "".join(f'<line x1="{-w // 2}" y1="{-y}" x2="{w // 2}" y2="{-y}" stroke="{INK}" stroke-width="4" opacity="0.5"/>'
+                         for y in range(60, h, 60))
+        inner = (f'<rect x="{-w // 2}" y="{-h}" width="{w}" height="{h}" rx="6" fill="#b45309" stroke="{INK}" stroke-width="8"/>{bricks}')
+    elif kind == "crate":
+        word = _esc(str(spec.get("text", "")))
+        inner = (f'<rect x="-90" y="-150" width="180" height="150" rx="8" fill="#d97706" stroke="{INK}" stroke-width="8"/>'
+                 f'<line x1="-90" y1="-150" x2="90" y2="0" stroke="{INK}" stroke-width="5" opacity="0.45"/>'
+                 f'<text x="0" y="-62" text-anchor="middle" font-size="34" font-weight="900" fill="{INK}" stroke="#fffbeb" stroke-width="6" '
+                 f'paint-order="stroke" font-family="Noto Sans, DejaVu Sans, sans-serif">{word}</text>')
+    elif kind == "easel":
+        inner = (f'<line x1="-70" y1="0" x2="0" y2="-460" stroke="#92400e" stroke-width="14" stroke-linecap="round"/>'
+                 f'<line x1="70" y1="0" x2="0" y2="-460" stroke="#92400e" stroke-width="14" stroke-linecap="round"/>'
+                 f'<line x1="0" y1="-60" x2="0" y2="-460" stroke="#92400e" stroke-width="12" stroke-linecap="round"/>'
+                 f'<rect x="-120" y="-420" width="240" height="190" rx="8" fill="#fffbeb" stroke="{INK}" stroke-width="8"/>'
+                 f'<circle cx="-50" cy="-340" r="34" fill="#38bdf8"/><circle cx="30" cy="-310" r="40" fill="#22c55e"/>'
+                 f'<circle cx="60" cy="-370" r="22" fill="#fde047"/><rect x="-100" y="-280" width="200" height="30" fill="#16a34a" opacity="0.7"/>')
+    elif kind == "chair":
+        inner = (f'<rect x="-70" y="-420" width="140" height="300" rx="20" fill="#7c3aed" stroke="{INK}" stroke-width="8"/>'
+                 f'<rect x="-90" y="-150" width="180" height="50" rx="12" fill="#a855f7" stroke="{INK}" stroke-width="8"/>'
+                 f'<line x1="-70" y1="-100" x2="-70" y2="0" stroke="{INK}" stroke-width="12" stroke-linecap="round"/>'
+                 f'<line x1="70" y1="-100" x2="70" y2="0" stroke="{INK}" stroke-width="12" stroke-linecap="round"/>')
     elif kind == "tree":
         inner = (
             f'<rect x="-9" y="-160" width="18" height="160" rx="6" fill="#92400e" stroke="{INK}" stroke-width="6"/>'
@@ -180,10 +259,15 @@ def prop(prefix: str, index: int, spec: dict, palette: dict, tl, cues: list) -> 
                  f'<rect x="-50" y="-30" width="100" height="10" fill="#fde047"/>')
     else:
         inner = ""
+    _move(gid, x0, spec, cues, tl)
+    return f'<g data-id="{gid}"><g transform="translate(0 {GROUND})">{inner}</g></g>'
+
+
+def _move(gid: str, x0: float, spec: dict, cues: list, tl) -> None:
+    """Place a prop at x, and slide it to 'to' at 'at' over 'dur' seconds when asked."""
     tl.start(gid, x=x0)
     if spec.get("to") is not None:
         tl.add(gid, "x", float(spec["to"]) * SCALE, when(spec.get("at"), cues), float(spec.get("dur", 3)), "linear", frm=x0)
-    return f'<g data-id="{gid}"><g transform="translate(0 {GROUND})">{inner}</g></g>'
 
 
 def _leg(ident: str, x: float, swing: str) -> str:
