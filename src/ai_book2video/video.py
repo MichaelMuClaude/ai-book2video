@@ -28,9 +28,16 @@ class SceneTiming:
     start: float
 
 
-def scene_text(scene: Scene) -> str:
-    """The on-screen subtitle: the Chinese subtitle if given, otherwise the narration."""
-    return scene.subtitle or scene.narration
+def scene_cues(scene: Scene, start: float, end: float) -> list[subtitles.Cue]:
+    """Subtitles for one scene: English narration with its Chinese pair when given."""
+    english = subtitles.sentences(scene.narration) or [scene.narration]
+    if scene.narration_zh:
+        return subtitles.pair_cues(english, subtitles.sentences(scene.narration_zh), start, end)
+    return subtitles.cues_for(scene.narration, start, end)
+
+
+def cue_rows(cues: list[subtitles.Cue]) -> list[list]:
+    return [[round(c.start, 3), round(c.end, 3), c.text, c.zh] for c in cues]
 
 
 def require_ffmpeg() -> str:
@@ -66,7 +73,7 @@ def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path) -> None
             "-map", "0:v", "-map", "[a]",
             "-t", f"{seconds:.3f}",
             "-vf", "format=yuv420p",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "10M", "-bufsize", "20M",
             "-c:a", "aac", "-b:a", "160k",
             "-movflags", "+faststart",
             str(out),
@@ -119,15 +126,18 @@ def build(
     timings: list[SceneTiming] = []
     cues: list[subtitles.Cue] = []
     cursor = 0.0
+    if tts == "kokoro":
+        speech.kokoro_batch([(scene.narration, audio_dir / f"scene{scene.index:03d}.wav") for scene in scenes], voice=voice)
     for scene in scenes:
         wav = audio_dir / f"scene{scene.index:03d}.wav"
-        speech.synthesize(scene.narration, wav, backend=tts, voice=voice, rate=rate, command=tts_command)
+        if tts != "kokoro":
+            speech.synthesize(scene.narration, wav, backend=tts, voice=voice, rate=rate, command=tts_command)
         spoken = speech.duration(wav)
         seconds = max(MIN_SCENE_SECONDS, spoken + TAIL_SECONDS)
         page = pages_dir / f"scene{scene.index:03d}.html"
-        local_cues = subtitles.cues_for(scene_text(scene), 0.0, spoken)
+        local_cues = scene_cues(scene, 0.0, spoken)
         page.write_text(
-            motion.scene_page_with_cues(scene, scene.index, script.title, seconds, [[c.start, c.end, c.text] for c in local_cues]),
+            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter),
             encoding="utf-8",
         )
         frames_dir = workdir / "frames" / f"scene{scene.index:03d}"
@@ -141,7 +151,7 @@ def build(
             shutil.rmtree(frames_dir, ignore_errors=True)
         clip_paths.append(clip)
         timings.append(SceneTiming(scene.index, round(spoken, 2), round(seconds, 2), round(cursor, 2)))
-        cues.extend(subtitles.Cue(cue.start + cursor, cue.end + cursor, cue.text) for cue in local_cues)
+        cues.extend(subtitles.Cue(cue.start + cursor, cue.end + cursor, cue.text, cue.zh) for cue in local_cues)
         cursor += seconds
     out.parent.mkdir(parents=True, exist_ok=True)
     join_clips(clip_paths, out, workdir)
@@ -154,7 +164,9 @@ def build(
         "subtitles": str(srt) if subtitles_file else None,
         "seconds": round(cursor, 2),
         "fps": FPS,
-        "voice": voice if tts == "espeak" else "custom command",
+        "voice": voice if tts in ("espeak", "kokoro") else "custom command",
+        "tts": tts,
+        "orientation": "portrait 1080x1920",
         "scenes": [timing.__dict__ for timing in timings],
     }
     (workdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -172,9 +184,9 @@ def preview(script: Script, outdir: Path, only: set[int] | None = None) -> list[
             continue
         seconds = max(MIN_SCENE_SECONDS, scene.seconds_estimate + TAIL_SECONDS)
         page = outdir / f"scene{scene.index:03d}.html"
-        cues = subtitles.cues_for(scene_text(scene), 0.0, max(1.0, seconds - TAIL_SECONDS))
+        cues = scene_cues(scene, 0.0, max(1.0, seconds - TAIL_SECONDS))
         page.write_text(
-            motion.scene_page_with_cues(scene, scene.index, script.title, seconds, [[c.start, c.end, c.text] for c in cues]),
+            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(cues), script.book, script.chapter),
             encoding="utf-8",
         )
         frames = outdir / f"scene{scene.index:03d}"

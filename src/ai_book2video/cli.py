@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(f"warning: {warning}")
     out = Path(args.output)
     workdir = Path(args.work) if args.work else out.with_suffix("")
-    voice = args.voice or ("cmn" if script.language.lower().startswith("zh") else "en-us")
+    voice = args.voice or ("af_heart" if args.tts == "kokoro" else "en-us")
     manifest = video.build(
         script,
         out,
@@ -126,10 +127,16 @@ def cmd_doctor(_: argparse.Namespace) -> int:
     except Book2VideoError:
         checks["Chrome (frame capture)"] = None
     checks["node (frame capture)"] = shutil.which("node")
+    kokoro = Path(speech.KOKORO_PYTHON)
+    if kokoro.exists():
+        probe = subprocess.run([str(kokoro), "-c", "import kokoro, torch; print(torch.cuda.is_available())"], capture_output=True, text=True)
+        checks["Kokoro voice (default narration)"] = f"{kokoro} (GPU: {probe.stdout.strip()})" if probe.returncode == 0 else None
+    else:
+        checks["Kokoro voice (default narration)"] = None
     missing = 0
     for name, found in checks.items():
         print(f"{'ok ' if found else 'MISSING'}  {name}  {found or ''}")
-        if not found and name.split(" ")[0] in ("ffmpeg", "espeak-ng", "Chrome", "node"):
+        if not found and name.split(" ")[0] in ("ffmpeg", "Chrome", "node"):
             missing += 1
     return 1 if missing else 0
 
@@ -171,8 +178,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="output .mp4")
     p.add_argument("--work", help="working folder (default: the output name without .mp4)")
     p.add_argument("--keep-frames", action="store_true", help="keep the captured frame images in the working folder")
-    p.add_argument("--tts", default="espeak", choices=speech.BACKENDS, help="narration engine")
-    p.add_argument("--voice", default=None, help="espeak voice, e.g. en-us or cmn; default: cmn for zh scripts, en-us otherwise")
+    p.add_argument("--tts", default="kokoro", choices=speech.BACKENDS, help="narration engine (kokoro is the default)")
+    p.add_argument("--voice", default=None, help="voice: af_heart (Kokoro, default), or an espeak voice such as en-us")
     p.add_argument("--rate", type=int, default=165, help="espeak words per minute")
     p.add_argument("--tts-command", default="", help="for --tts command: e.g. 'mytts --in {text} --out {out}'")
     p.add_argument("--scenes", help="render only these scenes, e.g. 1-3 (for a quick preview)")

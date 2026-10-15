@@ -17,6 +17,7 @@ class Cue:
     start: float
     end: float
     text: str
+    zh: str = ""
 
 
 def sentences(text: str) -> list[str]:
@@ -64,6 +65,22 @@ def cues_for(text: str, start: float, end: float) -> list[Cue]:
     return cues
 
 
+def pair_cues(english: list[str], chinese: list[str], start: float, end: float) -> list[Cue]:
+    """One cue per sentence pair. Each pair gets time in proportion to its English length."""
+    weights = [max(1, len(sentence.split())) for sentence in english]
+    total = sum(weights) or 1
+    cues: list[Cue] = []
+    cursor = start
+    for index, sentence in enumerate(english):
+        share = (end - start) * weights[index] / total
+        zh = chinese[index] if index < len(chinese) else ""
+        cues.append(Cue(cursor, min(end, cursor + share), sentence, zh))
+        cursor += share
+    if cues:
+        cues[-1].end = end
+    return cues
+
+
 def timestamp(seconds: float) -> str:
     milliseconds = int(round(seconds * 1000))
     hours, milliseconds = divmod(milliseconds, 3_600_000)
@@ -75,5 +92,6 @@ def timestamp(seconds: float) -> str:
 def write_srt(cues: list[Cue], path: Path) -> None:
     blocks = []
     for number, cue in enumerate(cues, start=1):
-        blocks.append(f"{number}\n{timestamp(cue.start)} --> {timestamp(cue.end)}\n{cue.text}\n")
+        text = cue.text + ("\n" + cue.zh if cue.zh else "")
+        blocks.append(f"{number}\n{timestamp(cue.start)} --> {timestamp(cue.end)}\n{text}\n")
     path.write_text("\n".join(blocks), encoding="utf-8")

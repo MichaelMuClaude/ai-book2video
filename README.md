@@ -1,31 +1,111 @@
 # ai-book2video
 
-Turn a Markdown document into a fun, animated, ad-style narrated MP4 video, with a voice and subtitles. Input is Markdown or plain text; convert other formats first.
+Turn a book chapter (or any Markdown document) into a fun, animated, narrated **portrait MP4** for phones.
 
-The tool does the mechanical work: it splits a document into sections, renders each scene as an animated motion-graphics page (words pop in, bullets slide in, numbers count up), captures the frames with headless Chrome, makes the narration with espeak-ng (or a command you give), and joins the clips into an H.264 MP4 with an SRT file. The scene script (what each scene shows and what the narrator says) is written by Claude or by hand, as JSON.
+- **9:16 video** (1080 × 1920), ready for short-video apps.
+- **Animated stick-figure stage** drawn in SVG: colourful crayon-textured backgrounds, round-headed characters with faces (happy, sad, surprised, hurt), blinking, breathing, walking, falling, talking, speech bubbles, impact bursts and props (cars, trees, sun, fire, buildings, books, podiums).
+- **A camera that cuts on every sentence** (wide, medium, close-up) and drifts, so the picture never sits still.
+- **Actions land on the words**: an action can be timed to a narration sentence (`"at": "s2"`), so the car hits exactly when the narrator says it does.
+- **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
+- **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
 
-## Use
+The tool does the mechanical work. The scene script (what each scene shows and what the narrator says) is written by Claude or by hand, as JSON. See `SKILL.md` for the full workflow Claude follows.
+
+## One chapter, one video
 
 ```bash
-ai-book2video doctor
-ai-book2video ingest doc.md -o book.json
-ai-book2video outline book.json
-ai-book2video section book.json s02
-ai-book2video validate examples/ai-paint-readme.script.json
-ai-book2video preview examples/ai-paint-readme.script.json -o preview
-ai-book2video build examples/ai-paint-readme.script.json -o how-it-works.mp4
+ai-book2video doctor                                   # check the tools
+ai-book2video ingest book.md -o book.json              # split the book into sections (Markdown or text)
+ai-book2video outline book.json                        # list the sections
+ai-book2video section book.json s03                    # read one section (add --part 2 for long ones)
+# write chapter3.script.json (see the format below)
+ai-book2video validate chapter3.script.json            # check it, including the English/Chinese sentence pairs
+ai-book2video preview chapter3.script.json -o preview  # three frames per scene, to check layout and motion
+ai-book2video build chapter3.script.json -o chapter3.mp4   # narration, frames, MP4 and SRT
 ```
 
-`examples/ai-paint-readme.script.json` is a 9-scene script written from ai-paint's README. Building it gives a two-minute MP4 in about 15 seconds on this machine.
+Try the example first:
 
-## Requirements
+```bash
+ai-book2video build examples/tortoise-and-hare.script.json -o slow-and-steady.mp4
+```
 
-- Python 3.10+ (standard library only; no pip install)
-- ffmpeg and ffprobe with libx264 and AAC
-- espeak-ng (narration)
-- Node.js 22+ (frame capture)
-- Chrome or Chromium (frame capture; set `CHROME_PATH` if it is not on PATH)
-- Input: Markdown (`.md`) or plain text (`.txt`)
+Input must be Markdown (`.md`) or plain text (`.txt`). Convert PDF, EPUB or DOCX to Markdown first.
+
+## Install
+
+System tools: Python 3.10+, Node.js 22+, ffmpeg (with libx264), Chrome or Chromium, and espeak-ng (fallback voice). The package itself uses only the Python standard library:
+
+```bash
+git clone https://github.com/MichaelMuClaude/ai-book2video.git
+cd ai-book2video
+printf '#!/usr/bin/env bash\nexport PYTHONPATH="%s/src${PYTHONPATH:+:$PYTHONPATH}"\nexec python3 -m ai_book2video "$@"\n' "$PWD" > ~/.local/bin/ai-book2video
+chmod +x ~/.local/bin/ai-book2video
+```
+
+Kokoro (the default voice) runs in its own virtual environment. With an NVIDIA GPU:
+
+```bash
+python3 -m venv ~/.venvs/kokoro
+~/.venvs/kokoro/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
+~/.venvs/kokoro/bin/pip install kokoro soundfile
+```
+
+The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `KOKORO_PYTHON` if the environment lives elsewhere, or use `--tts espeak` to skip Kokoro.
+
+## Script format
+
+```json
+{
+  "title": "Slow and Steady",
+  "language": "en",
+  "scenes": [
+    {
+      "kind": "stage",
+      "heading": "Slow and Steady",
+      "narration": "A hare laughed at a tortoise. So the tortoise said: let us race.",
+      "narration_zh": "一只兔子嘲笑乌龟。于是乌龟说：那我们来比赛吧。",
+      "stage": {
+        "background": "field",
+        "split": true,
+        "actors": [
+          {"label": "Hare", "x": 500, "action": "talk", "face": "happy",
+           "say": [{"text": "So slow!", "at": "s1+0.4", "dur": 2.0}]},
+          {"label": "Tortoise", "x": 1400, "action": "stand", "face": "sad",
+           "faces": [{"at": "s2", "face": "happy"}]}
+        ],
+        "props": [{"type": "sun", "x": 1500, "y": 100}]
+      }
+    }
+  ]
+}
+```
+
+**Narration.** `narration` is spoken (English). `narration_zh` is its Chinese translation, sentence by sentence: both must have the same number of sentences, and `validate` checks it. Avoid abbreviations with full stops (write "Thomas Ricks", not "Thomas E. Ricks") because a full stop ends a sentence.
+
+**Scene kinds.** `stage` (the animated stick-figure scene) is the main one. `title`, `text`, `bullets`, `quote` and `stat` (a number that counts up) are also available, for openings, credits and key points.
+
+**Stage.**
+
+| Field | Values |
+|---|---|
+| `background` | `street`, `field`, `room`, `plain`; `"split": true` adds two colour blocks |
+| actor `action` | `stand`, `walk` (with `to`, `at`, `dur`), `fall` (at `at`), `talk`, `wave` |
+| actor `face` / `faces` | `neutral`, `happy`, `sad`, `surprised`, `hurt`; `faces` changes the face over time |
+| actor `say` | speech bubbles: `[{"text": "...", "at": "s2", "dur": 2.5}]` |
+| actor `label`, `colour` | a short name above the head; a body colour |
+| prop `type` | `car` (moves with `to`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`) |
+| `camera` | `true` by default: a new shot on every sentence |
+
+`x` positions are on a 0–1920 scale across the stage (they are fitted to the portrait frame); keep actors between about 250 and 1650. `y` is in pixels from the top. Times are seconds, or a sentence reference: `"s2"` is the start of sentence 2, `"s2+0.5"` half a second later.
+
+## Output
+
+`build` writes the MP4 and an SRT file next to it, plus a working folder with the pages, audio, clips and `manifest.json` (scene timings). Rendering uses headless Chrome to capture every frame, about 2–3 seconds of compute per second of video. A 5-minute chapter takes about 15 minutes and is about 250 MB.
+
+## Copyright
+
+Summarise in your own words, keep any quotation short and attributed, and name the book and author (for example in a closing credit scene). Do not reproduce long passages. Check the rules of the platform where you publish. This is not legal advice.
 
 ## Tests
 
@@ -35,17 +115,17 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 
 ## Layout
 
-- `src/ai_book2video/ingest.py`: document to sections
+- `src/ai_book2video/ingest.py`: Markdown or text to sections (CJK-aware word counts)
 - `src/ai_book2video/script.py`: scene script format and validation
-- `src/ai_book2video/motion.py`: animated scene templates and the timeline engine
+- `src/ai_book2video/motion.py`: page templates, the timeline engine and bilingual captions
+- `src/ai_book2video/svgstage.py`: the SVG stick-figure stage, faces, props, camera and sentence timing
 - `src/ai_book2video/capture.mjs`: headless Chrome frame capture (DevTools protocol)
-- `src/ai_book2video/browser.py`: find Chrome and Node
-- `src/ai_book2video/speech.py`: narration (espeak-ng or a custom command)
-- `src/ai_book2video/subtitles.py`: SRT timing
-- `src/ai_book2video/video.py`: per-scene clips and the joined MP4
+- `src/ai_book2video/speech.py`, `tts_kokoro.py`: narration with Kokoro, espeak-ng or a custom command
+- `src/ai_book2video/subtitles.py`: sentence splitting, bilingual cues and SRT
+- `src/ai_book2video/video.py`: clips per scene, joined into the final MP4
 - `src/ai_book2video/cli.py`: the `ai-book2video` commands
-- `SKILL.md`: the instructions Claude reads when it uses the tool
+- `examples/tortoise-and-hare.script.json`: a public-domain example (Aesop)
 
-## Status
+## Licence
 
-Version 0.1: first working version, MIT licensed (see `LICENSE`). Known limits are listed in `SKILL.md`. Not yet done: better voices, GPU rendering, custom drawings beyond the built-in stick-figure stage, and images from the book.
+MIT (see `LICENSE`).

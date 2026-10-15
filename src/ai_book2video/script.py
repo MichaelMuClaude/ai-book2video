@@ -51,6 +51,7 @@ class Scene:
     suffix: str = ""
     subtitle: str = ""
     stage: dict | None = None
+    narration_zh: str = ""
 
     @property
     def narration_words(self) -> int:
@@ -68,6 +69,8 @@ class Script:
     language: str = "en"
     subtitle: str = ""
     warnings: list[str] = field(default_factory=list)
+    book: str = ""
+    chapter: str = ""
 
     @property
     def seconds_estimate(self) -> float:
@@ -120,6 +123,16 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
             errors.append(f"{where}: 'text' scenes need a 'body'")
         if kind == "quote" and not str(scene.get("body", "")).strip():
             errors.append(f"{where}: 'quote' scenes need a 'body'")
+        zh = str(scene.get("narration_zh", "")).strip()
+        if zh and narration:
+            from ai_book2video.subtitles import sentences as split_sentences
+
+            en_count = len(split_sentences(narration))
+            zh_count = len(split_sentences(zh))
+            if en_count != zh_count:
+                errors.append(f"{where}: narration_zh has {zh_count} sentences but narration has {en_count}; they must pair one to one")
+        elif narration and not zh:
+            warnings.append(f"{where}: no 'narration_zh'; the subtitle will be English only")
         if kind == "stage":
             stage = scene.get("stage")
             if not isinstance(stage, dict):
@@ -129,8 +142,8 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
                     if not isinstance(actor, dict) or actor.get("action", "stand") not in ("stand", "walk", "fall", "talk", "wave"):
                         errors.append(f"{where}: actor action must be stand, walk, fall, talk or wave")
                 for prop in stage.get("props", []):
-                    if not isinstance(prop, dict) or prop.get("type") not in ("car", "tree", "sun", "fire", "building", "podium", "book"):
-                        errors.append(f"{where}: prop type must be car, tree, sun, fire, building, podium or book")
+                    if not isinstance(prop, dict) or prop.get("type") not in ("car", "tree", "sun", "fire", "building", "podium", "book", "burst"):
+                        errors.append(f"{where}: prop type must be car, tree, sun, fire, building, podium, book or burst")
                 if stage.get("background", "plain") not in ("street", "field", "room", "plain"):
                     errors.append(f"{where}: background must be street, field, room or plain")
         if kind == "stat":
@@ -178,6 +191,7 @@ def load(path: Path) -> Script:
                 id=str(item.get("id", f"scene{index:02d}")).strip(),
                 value=float(item["value"]) if item.get("value") is not None else None,
                 subtitle=str(item.get("subtitle", "")).strip(),
+                narration_zh=re.sub(r"\s+", " ", str(item.get("narration_zh", ""))).strip(),
                 stage=item.get("stage") if isinstance(item.get("stage"), dict) else None,
                 prefix=str(item.get("prefix", "")),
                 suffix=str(item.get("suffix", "")),
@@ -189,4 +203,6 @@ def load(path: Path) -> Script:
         language=str(raw.get("language", "en")),
         subtitle=str(raw.get("subtitle", "")).strip(),
         warnings=warnings,
+        book=str(raw.get("book", "")).strip(),
+        chapter=str(raw.get("chapter", "")).strip(),
     )

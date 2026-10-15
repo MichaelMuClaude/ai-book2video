@@ -22,7 +22,21 @@ class CheckTests(unittest.TestCase):
     def test_good_script_has_no_errors(self):
         errors, warnings = script.check(GOOD)
         self.assertEqual(errors, [])
-        self.assertEqual(warnings, [])
+        self.assertTrue(all("narration_zh" in warning for warning in warnings))
+
+    def test_chinese_sentences_must_pair_with_english(self):
+        bad = json.loads(json.dumps(GOOD))
+        bad["scenes"][0]["narration"] = "One. Two."
+        bad["scenes"][0]["narration_zh"] = "一。"
+        errors, _ = script.check(bad)
+        self.assertTrue(any("must pair one to one" in error for error in errors))
+
+    def test_matching_chinese_sentences_are_accepted(self):
+        good = json.loads(json.dumps(GOOD))
+        good["scenes"][0]["narration"] = "One. Two."
+        good["scenes"][0]["narration_zh"] = "一。二。"
+        errors, _ = script.check(good)
+        self.assertEqual(errors, [])
 
     def test_missing_narration_is_an_error(self):
         bad = json.loads(json.dumps(GOOD))

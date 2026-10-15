@@ -1,0 +1,219 @@
+{
+  "title": "Slow and Steady",
+  "language": "en",
+  "scenes": [
+    {
+      "kind": "stage",
+      "heading": "Slow and Steady",
+      "narration": "A hare once laughed at a tortoise for being slow. So the tortoise said: let us race.",
+      "narration_zh": "从前，一只兔子嘲笑乌龟走得慢。于是乌龟说：那我们来比赛吧。",
+      "stage": {
+        "background": "field",
+        "split": true,
+        "actors": [
+          {
+            "label": "Hare",
+            "x": 500,
+            "action": "talk",
+            "face": "happy",
+            "say": [
+              {
+                "text": "So slow!",
+                "at": "s1+0.4",
+                "dur": 2.0
+              }
+            ]
+          },
+          {
+            "label": "Tortoise",
+            "x": 1400,
+            "action": "stand",
+            "face": "sad",
+            "faces": [
+              {
+                "at": "s2",
+                "face": "happy"
+              }
+            ],
+            "say": [
+              {
+                "text": "Let's race!",
+                "at": "s2+0.3",
+                "dur": 2.0
+              }
+            ]
+          }
+        ],
+        "props": [
+          {
+            "type": "sun",
+            "x": 1500,
+            "y": 100
+          }
+        ]
+      }
+    },
+    {
+      "kind": "stage",
+      "narration": "The race began, and the hare shot ahead. The tortoise kept walking, one step at a time.",
+      "narration_zh": "比赛开始了，兔子一下子冲到前面。乌龟一步一步，继续往前走。",
+      "stage": {
+        "background": "field",
+        "actors": [
+          {
+            "label": "Hare",
+            "x": 200,
+            "action": "walk",
+            "to": 1700,
+            "at": "s1+0.3",
+            "dur": 2.0,
+            "face": "happy"
+          },
+          {
+            "label": "Tortoise",
+            "x": 200,
+            "action": "walk",
+            "to": 700,
+            "at": "s1+0.3",
+            "dur": 9.0,
+            "face": "neutral"
+          }
+        ],
+        "props": [
+          {
+            "type": "tree",
+            "x": 1600
+          },
+          {
+            "type": "burst",
+            "x": 300,
+            "y": 640,
+            "at": "s1",
+            "text": "GO!",
+            "dur": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "kind": "stage",
+      "narration": "Far ahead, the hare felt sure of winning. He lay down under a tree and fell asleep.",
+      "narration_zh": "跑到很远的地方，兔子觉得自己赢定了。它躺在一棵树下，睡着了。",
+      "stage": {
+        "background": "field",
+        "actors": [
+          {
+            "label": "Hare",
+            "x": 1100,
+            "action": "fall",
+            "at": "s2",
+            "face": "happy",
+            "say": [
+              {
+                "text": "Easy win!",
+                "at": "s1+0.3",
+                "dur": 2.0
+              }
+            ]
+          }
+        ],
+        "props": [
+          {
+            "type": "tree",
+            "x": 1350
+          },
+          {
+            "type": "sun",
+            "x": 400,
+            "y": 100
+          }
+        ]
+      }
+    },
+    {
+      "kind": "stage",
+      "narration": "The tortoise walked past the sleeping hare. When the hare woke up, the tortoise was already at the finish.",
+      "narration_zh": "乌龟从睡着的兔子身边走了过去。等兔子醒来时，乌龟已经到了终点。",
+      "stage": {
+        "background": "plain",
+        "actors": [
+          {
+            "label": "Hare",
+            "x": 180,
+            "action": "fall",
+            "at": 0,
+            "face": "neutral",
+            "faces": [
+              {
+                "at": 0.05,
+                "face": "neutral"
+              },
+              {
+                "at": "s2",
+                "face": "surprised"
+              }
+            ]
+          },
+          {
+            "label": "Tortoise",
+            "x": 80,
+            "action": "walk",
+            "to": 1650,
+            "at": 0.2,
+            "dur": 2.2,
+            "face": "happy",
+            "say": [
+              {
+                "text": "I made it!",
+                "at": "s2+0.5",
+                "dur": 2.4
+              }
+            ]
+          }
+        ],
+        "props": [
+          {
+            "type": "burst",
+            "x": 1450,
+            "y": 560,
+            "at": "s2+0.3",
+            "text": "WIN!",
+            "dur": 1.6
+          }
+        ]
+      }
+    },
+    {
+      "kind": "stage",
+      "heading": "The moral",
+      "narration": "Slow and steady wins the race. Talent matters less than keeping going.",
+      "narration_zh": "慢而稳，才能赢得比赛。天赋，不如坚持重要。",
+      "stage": {
+        "background": "plain",
+        "split": true,
+        "actors": [
+          {
+            "label": "Tortoise",
+            "x": 960,
+            "action": "wave",
+            "face": "happy"
+          }
+        ],
+        "props": [
+          {
+            "type": "sun",
+            "x": 1500,
+            "y": 100
+          }
+        ]
+      }
+    },
+    {
+      "kind": "title",
+      "heading": "Based on",
+      "body": "The Tortoise and the Hare, one of Aesop's fables (public domain)",
+      "narration": "This video retells The Tortoise and the Hare, one of Aesop's fables.",
+      "narration_zh": "本视频改编自伊索寓言《龟兔赛跑》。"
+    }
+  ]
+}
