@@ -1,0 +1,75 @@
+{
+  "title": "How ai-paint works",
+  "subtitle": "A command-line paint tool for AI agents",
+  "language": "en",
+  "scenes": [
+    {
+      "kind": "title",
+      "heading": "How ai-paint works",
+      "body": "A command-line paint tool that an AI agent can use",
+      "narration": "This video explains ai-paint, a command-line paint tool. An AI agent draws with it the way a person uses a canvas, one step at a time."
+    },
+    {
+      "kind": "text",
+      "heading": "A picture is a JSON document",
+      "body": "A canvas size, a list of layers, and a list of operations.",
+      "narration": "An ai-paint picture is a JSON file. It holds a canvas size, a list of layers, and a list of operations. Because the file is plain text, an agent can read it, change it, and save it again."
+    },
+    {
+      "kind": "bullets",
+      "heading": "Operations do the drawing",
+      "items": [
+        "Drawn in order: a later operation lands on top",
+        "Layers stack in list order, bottom first",
+        "Hidden layers are skipped when rendering",
+        "Coordinates are pixels from the top-left corner"
+      ],
+      "narration": "Operations are drawn in the order they are listed, so a later one lands on top of an earlier one. Layers stack in list order, with the first at the bottom. A hidden layer is skipped. Coordinates count pixels from the top-left corner."
+    },
+    {
+      "kind": "bullets",
+      "heading": "What an operation can draw",
+      "items": [
+        "Strokes, lines, rectangles, ellipses and polygons",
+        "Text, pasted pictures and erased areas",
+        "Speech balloons, limbs and smooth curves",
+        "SVG code for detailed drawings"
+      ],
+      "narration": "The operation types cover simple shapes, text, and pasted pictures. There are also speech balloons, limbs and smooth curves for characters, and an svg operation for detailed drawings written as SVG code."
+    },
+    {
+      "kind": "quote",
+      "body": "For detailed drawings, especially characters, the svg op is the most flexible tool.",
+      "source": "From the ai-paint README",
+      "narration": "The README gives this advice. For detailed drawings, especially characters, the svg operation is the most flexible tool. An agent can write SVG it already knows, and still use the layers, grid views and balloons around it."
+    },
+    {
+      "kind": "text",
+      "heading": "Drawing with SVG code",
+      "body": "Markup inside a box on a layer. Scripts and outside links are refused.",
+      "narration": "The svg operation takes SVG markup inside a box on a layer. The example anime girl defines her eye once and mirrors it with a use element, clips the iris to the eye white, and blurs the blush. Scripts and links to outside files are refused, and the drawing is rendered by the system's librsvg library."
+    },
+    {
+      "kind": "text",
+      "heading": "Change one thing, keep the rest",
+      "body": "Each operation has an id. Update one by its id.",
+      "narration": "Every operation has an id, so the agent can change one of them later and leave the rest of the picture as it was. This is what makes repeated edits practical."
+    },
+    {
+      "kind": "bullets",
+      "heading": "Limits to know",
+      "items": [
+        "Canvas up to 10,000 pixels on each side",
+        "The built-in font covers Latin letters only",
+        "Existing operations cannot be rotated or scaled yet"
+      ],
+      "narration": "There are limits to know about. A canvas can be up to ten thousand pixels on each side. The built-in font covers Latin letters, so other scripts need a font file. Existing operations cannot be rotated or scaled yet."
+    },
+    {
+      "kind": "title",
+      "heading": "Try it",
+      "body": "ai-paint new, ai-paint apply, ai-paint render",
+      "narration": "To try it, create a new picture with the new command, apply a changes file with the apply command, and turn the result into a PNG with the render command."
+    }
+  ]
+}
