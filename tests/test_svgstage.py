@@ -76,6 +76,11 @@ class StagePageTests(unittest.TestCase):
         spins = [a for a in anims if a["id"] == "sp2-m" and a["p"] == "r"]
         self.assertEqual(spins[0]["to"], 1080)
 
+    def test_long_burst_words_get_a_label(self):
+        page = self.page({"props": [{"type": "burst", "x": 500, "y": 500, "text": "CHANCELLOR"},
+                                    {"type": "burst", "x": 1500, "y": 500, "text": "BANG"}]})
+        self.assertEqual(len(re.findall(r'<rect x="-\d+" y="-34"', page)), 1)
+
     def test_fall_lands_on_its_sentence(self):
         page = self.page({"actors": [{"x": 900, "action": "fall", "at": "s2"}]})
         anims = json.loads(re.search(r"const ANIMS = (\[.*?\]); const INIT", page, re.S).group(1))

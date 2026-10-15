@@ -101,7 +101,7 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 
 ## Output
 
-`build` writes the MP4 and an SRT file next to it, plus a working folder with the pages, audio, clips and `manifest.json` (scene timings). Rendering uses headless Chrome to capture every frame. Scenes render in parallel (`--jobs`, default: a quarter of the CPU cores, at most 8), each in its own Chrome, and the clips are then joined in order. On a 32-core machine a 9-minute chapter renders in about 5 minutes; one scene at a time it takes about 3 seconds of compute per second of video. Files are about 45 MB per minute.
+`build` writes the MP4 and an SRT file next to it, plus a working folder with the pages, audio, clips and `manifest.json` (scene timings). Rendering uses headless Chrome to capture every frame. Scenes render in parallel (`--jobs`, default: an eighth of the CPU cores, at most 4, to keep the CPU cool; raise it for speed), each in its own Chrome, and the clips are then joined in order. On a 32-core machine a 9-minute chapter renders in about 5 minutes with `--jobs 8`; one scene at a time it takes about 3 seconds of compute per second of video. Files are about 45 MB per minute. `--encoder nvenc` encodes on an NVIDIA GPU instead of with libx264; in testing it saved only about 6% of the time (frame capture, not encoding, is the heavy part) and made files about 50% larger, so `cpu` stays the default.
 
 ## Copyright
 

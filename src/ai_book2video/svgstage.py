@@ -118,12 +118,16 @@ def _burst(gid: str, x: float, y: float, spec: dict, cues: list, tl) -> str:
     """A comic impact star that pops in at a moment and fades."""
     import math
 
+    text = str(spec.get("text", "!"))
+    # Longer words get a yellow label on the star so every letter sits on yellow (about 32 px per letter).
+    label_w = len(text) * 32 + 36
+    half = max(120, label_w / 2 + 40)
     points = []
     for i in range(16):
-        r = 120 if i % 2 == 0 else 60
+        r = 1.0 if i % 2 == 0 else 0.5
         a = math.pi * 2 * i / 16
-        points.append(f"{r * math.cos(a):.0f},{r * math.sin(a):.0f}")
-    word = _esc(spec.get("text", "!"))
+        points.append(f"{r * half * math.cos(a):.0f},{r * 120 * math.sin(a):.0f}")
+    word = _esc(text)
     at = when(spec.get("at"), cues, 1.0)
     dur = float(spec.get("dur", 1.2))
     tl.start(gid, s=0, o=0)
@@ -132,7 +136,9 @@ def _burst(gid: str, x: float, y: float, spec: dict, cues: list, tl) -> str:
     tl.add(gid, "o", 0, at + dur, 0.3)
     return (f'<g data-id="{gid}" style="{_fill_box("50% 50%")}"><g transform="translate({x:.0f} {y:.0f})">'
             f'<polygon points="{" ".join(points)}" fill="#fde047" stroke="{INK}" stroke-width="8" stroke-linejoin="round"/>'
-            f'<text x="0" y="16" text-anchor="middle" font-size="52" font-weight="900" fill="{INK}" '
+            + (f'<rect x="{-label_w / 2:.0f}" y="-34" width="{label_w}" height="70" rx="20" fill="#fde047" stroke="{INK}" stroke-width="6"/>'
+               if len(text) > 4 else '')
+            + f'<text x="0" y="16" text-anchor="middle" font-size="52" font-weight="900" fill="{INK}" '
             f'font-family="Noto Sans, DejaVu Sans, sans-serif">{word}</text></g></g>')
 
 

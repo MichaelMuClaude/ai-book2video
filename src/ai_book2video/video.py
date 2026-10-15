@@ -20,7 +20,7 @@ CAPTURE = HERE / "capture.mjs"
 FPS = 30
 MIN_SCENE_SECONDS = 4.0
 TAIL_SECONDS = 0.8
-DEFAULT_JOBS = max(1, min(8, (os.cpu_count() or 4) // 4))  # scenes rendered at the same time
+DEFAULT_JOBS = max(1, min(4, (os.cpu_count() or 4) // 8))  # scenes rendered at the same time; kept low so the CPU stays cool
 
 
 @dataclass
@@ -66,7 +66,30 @@ def capture_frames(page: Path, frames_dir: Path, times: list[float]) -> None:
         raise Book2VideoError(f"frame capture failed for {page.name}: {(result.stderr or result.stdout).strip()[-600:]}")
 
 
-def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path) -> None:
+ENCODERS = ("cpu", "nvenc")
+VIDEO_ARGS = {
+    # libx264 on the CPU: small files, but it competes with Chrome for the cores.
+    "cpu": ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "10M", "-bufsize", "20M"],
+    # NVIDIA hardware encoder: frees the CPU for frame capture. Constant quality 23, same bitrate cap.
+    "nvenc": ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-maxrate", "10M", "-bufsize", "20M"],
+}
+
+
+def nvenc_available() -> bool:
+    """True when ffmpeg has h264_nvenc and an NVIDIA GPU accepts a tiny test encode."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return False
+    probe = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+         "-c:v", "h264_nvenc", "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+    )
+    return probe.returncode == 0
+
+
+def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path, encoder: str = "cpu") -> None:
     result = subprocess.run(
         [
             require_ffmpeg(), "-y", "-loglevel", "error",
@@ -76,7 +99,7 @@ def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path) -> None
             "-map", "0:v", "-map", "[a]",
             "-t", f"{seconds:.3f}",
             "-vf", "format=yuv420p",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "10M", "-bufsize", "20M",
+            *VIDEO_ARGS[encoder],
             "-c:a", "aac", "-b:a", "160k",
             "-movflags", "+faststart",
             str(out),
@@ -112,11 +135,16 @@ def build(
     subtitles_file: bool = True,
     keep_frames: bool = False,
     jobs: int = DEFAULT_JOBS,
+    encoder: str = "cpu",
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
     find_node()
     find_chrome()
+    if encoder not in ENCODERS:
+        raise Book2VideoError(f"encoder must be one of {', '.join(ENCODERS)}")
+    if encoder == "nvenc" and not nvenc_available():
+        raise Book2VideoError("the nvenc encoder needs ffmpeg with h264_nvenc and an NVIDIA GPU; use --encoder cpu")
     workdir.mkdir(parents=True, exist_ok=True)
     scenes = [scene for scene in script.scenes if only is None or scene.index in only]
     if not scenes:
@@ -159,7 +187,7 @@ def build(
             shutil.rmtree(frames_dir)
         times = [i / FPS for i in range(max(1, round(seconds * FPS)))]
         capture_frames(page, frames_dir, times)
-        encode_scene(frames_dir, wav, seconds, clip)
+        encode_scene(frames_dir, wav, seconds, clip, encoder)
         if not keep_frames:
             shutil.rmtree(frames_dir, ignore_errors=True)
 
@@ -181,6 +209,7 @@ def build(
         "voice": voice if tts in ("espeak", "kokoro") else "custom command",
         "tts": tts,
         "orientation": "portrait 1080x1920",
+        "encoder": encoder,
         "scenes": [timing.__dict__ for timing in timings],
     }
     (workdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
