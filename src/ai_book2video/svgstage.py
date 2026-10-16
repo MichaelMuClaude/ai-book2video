@@ -609,7 +609,7 @@ def _camera(spec: dict, cues: list, duration: float, tl) -> None:
 CAMERAS = ("classic", "director")
 
 
-def stage(scene: Scene, palette: dict, tl, cues: list | None = None, duration: float = 6.0, camera: str = "classic") -> str:
+def stage(scene: Scene, palette: dict, tl, cues: list | None = None, duration: float = 6.0, camera: str = "director") -> str:
     """`camera` is the script's default camera; a stage's own "camera" (false, "classic" or "director") wins."""
     cues = cues or []
     spec = scene.stage or {}

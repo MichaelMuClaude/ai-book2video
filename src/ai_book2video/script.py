@@ -78,7 +78,7 @@ class Script:
     book: str = ""
     chapter: str = ""
     palettes: list[dict] = field(default_factory=list)
-    camera: str = "classic"
+    camera: str = "director"
 
     @property
     def seconds_estimate(self) -> float:
@@ -110,7 +110,7 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
         return ["the script must be a JSON object"], []
     if not str(raw.get("title", "")).strip():
         errors.append("missing top-level 'title'")
-    if raw.get("camera", "classic") not in ("classic", "director"):
+    if raw.get("camera", "director") not in ("classic", "director"):
         errors.append("top-level 'camera' must be classic or director")
     palettes = raw.get("palettes")
     if palettes is not None:
@@ -262,5 +262,5 @@ def load(path: Path) -> Script:
         book=str(raw.get("book", "")).strip(),
         chapter=str(raw.get("chapter", "")).strip(),
         palettes=[dict(palette) for palette in raw.get("palettes") or []],
-        camera=str(raw.get("camera", "classic")),
+        camera=str(raw.get("camera", "director")),
     )

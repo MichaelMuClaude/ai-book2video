@@ -9,7 +9,7 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
 - **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
 - **Timed to the voice**: subtitles start when each sentence is actually spoken, from Kokoro's word timings, and actions can land on a word (`"at": "w:knife"`).
-- **A director camera** (`"camera": "director"`): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move.
+- **A director camera** (default): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move. `"camera": "classic"` brings back the original cut-every-sentence style.
 - **Checked with numbers** (`check`): motion per scene, frozen stretches, jumps, blank frames, silent scenes and loudness, before anyone watches. The finished film is levelled to -16 LUFS.
 - **Sound effects made in code** (`--sfx`): bangs, thuds, train whistles and chugs, footsteps, ticking clocks, pops and whooshes, synthesised from tones and noise and timed to the action. No sound files to download or license.
 - **Learn a style from a reference** (`analyze-ref`): measure a video or picture you like (cuts, shot lengths, colours, motion), get a contact sheet and starter colour palettes, and give the book its own look with a `palettes` list.
@@ -107,7 +107,7 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 | actor `say` | speech bubbles: `[{"text": "...", "at": "s2", "dur": 2.5}]` |
 | actor `label`, `colour` | a short name above the head; a body colour |
 | prop `type` | `car`, `train` (move with `to`; `armoured`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`), `letter` (`y`, `to`), `clock` (`spin`, `at`, `dur`), `wall` (`w`, `h`), `crate` (`text`), `chair`, `easel` |
-| `camera` | top level, per stage or `--camera`: `classic` (default; a new framing on every sentence), `director` (the move fits what each sentence shows), or `false` on a stage |
+| `camera` | top level, per stage or `--camera`: `director` (default; the move fits what each sentence shows), `classic` (a new framing on every sentence), or `false` on a stage |
 | timing (`at`) | seconds, `"s2+0.5"` (sentence start), or `"w:knife"` (when that word is said; `#2` for the second time) |
 | `palettes` (top level) | colour sets scenes take in turn: `[{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}]`; text colours are chosen for contrast |
 | prop or actor `sfx` | with `--sfx`: `impact`, `chime`, `sad`, `question`, `pop` or `none` (otherwise chosen from the action or the burst's word) |
