@@ -97,6 +97,16 @@ not a fixed loop.**
   during speech changed by under 0.1 dB, and Whisper still matched 97.5% of the script's words.
 - From anything2video's audio engine (MIT): one mood per kind of film, the bed well under the voice.
 
+**21b. A wipe needs a bright edge, or it reads as a PowerPoint transition.** A flat colour panel
+sliding across, with no highlight at the edge that is actually sweeping the screen, looks like a
+slide deck, not an animation.
+- Evidence: our own scene-to-scene wipe was exactly this (confirmed on frames of a real render: a
+  flat cyan slab, hard edge, no glow). Added a line at the sweeping edge with both a dark outline
+  and a white core, so it reads against a light or a dark scene either way.
+- From anything2video's gallery (Apache-2.0/MIT): a wipe transitions card names this as the
+  "known pitfall" for exactly this effect, and gives the two-tone (white core, dark outline)
+  recipe for it.
+
 **21. Place a sound by its sync point, not its first sample.** A hit is heard on its transient, so
 put it one frame early; a whoosh is heard at its peak, so centre it on the moment the movement
 crosses the frame.

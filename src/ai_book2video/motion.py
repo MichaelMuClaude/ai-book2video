@@ -253,9 +253,23 @@ def _wrapper_page(palette: dict, body: str, timeline: Timeline, duration: float,
     body = _header(book, chapter, palette) + body
     anims = json.dumps(timeline.sorted_anims())
     init = json.dumps(timeline.init)
-    panel = f"background:{palette['accent']};"
-    start = f'<div class="el" data-id="wipe-out" style="left:0;top:0;width:{WIDTH}px;height:{HEIGHT}px;{panel}"></div>'
-    end = f'<div class="el" data-id="wipe-in" style="left:0;top:0;width:{WIDTH}px;height:{HEIGHT}px;{panel}"></div>'
+    # A flat slab with no edge reads as a PowerPoint transition (anything2video's wipe-transitions
+    # card calls this out by name). The sweeping edge gets a bright line: a dark outline so it shows
+    # on a light scene, a white core so it shows on a dark one, each side readable either way.
+    edge_out = ("to right", "right: -14px", "left: auto")   # wipe-out's reveal edge is on its right
+    edge_in = ("to left", "left: -14px", "right: auto")     # wipe-in's reveal edge is on its left
+    fill = palette['accent']
+
+    def _panel(gid: str, direction: str) -> str:
+        grad, _, _ = edge_out if direction == "out" else edge_in
+        glow = (f"linear-gradient({grad}, transparent 0%, transparent calc(100% - 26px), "
+                f"rgba(255,255,255,0.55) calc(100% - 15px), #111111 calc(100% - 7px), "
+                f"#111111 calc(100% - 5px), #ffffff calc(100% - 4px), #ffffff 100%)")
+        return (f'<div class="el" data-id="{gid}" style="left:0;top:0;width:{WIDTH}px;height:{HEIGHT}px;'
+                f'background:{glow},{fill};"></div>')
+
+    start = _panel("wipe-out", "out")
+    end = _panel("wipe-in", "in")
     caption = '<div id="caption"><div class="box"><span id="cap-en"></span><span id="cap-zh"></span></div></div>'
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
