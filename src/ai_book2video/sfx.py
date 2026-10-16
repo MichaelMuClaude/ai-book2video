@@ -13,36 +13,17 @@ from __future__ import annotations
 
 import math
 import random
-import re
 import struct
 import wave
 from pathlib import Path
 
 from ai_book2video.script import Scene
-from ai_book2video.svgstage import when
+from ai_book2video.svgstage import burst_kind, when  # noqa: F401  (burst_kind is part of this module's API)
 
 RATE = 24000
 STEP_EVERY = 0.55  # matches the walking leg swing (1.1 s per stride, two steps)
 
-IMPACT = {"BANG", "BOOM", "CRASH", "STAB", "WHACK", "SNAP", "SCREECH", "SLAP", "ZING", "OUCH", "THUD", "POW", "WHAM"}
-SAD = {"FAIL", "FAILURE", "LOST", "FLOP", "DISASTER", "NO", "OOPS"}
-HAPPY = {"WIN", "PASS", "BRAVO", "CHEERS", "YUM", "FREE", "FAMOUS", "ELECTED", "WORDS", "FACTS", "CABINET",
-         "CHANCELLOR", "GO", "YES", "GOT", "ETON", "WOW", "HOORAY"}
 KINDS = ("impact", "chime", "sad", "question", "pop", "none")
-
-
-def burst_kind(text: str) -> str:
-    """Pick a sound for a burst from its word: BANG hits, FAIL droops, BRAVO chimes, ? asks."""
-    words = set(re.findall(r"[A-Z]+", text.upper()))
-    if words & IMPACT:
-        return "impact"
-    if words & SAD:
-        return "sad"
-    if words & HAPPY:
-        return "chime"
-    if "?" in text:
-        return "question"
-    return "pop"
 
 
 # --- synthesis -------------------------------------------------------------------------------

@@ -20,6 +20,7 @@ Life:
 from __future__ import annotations
 
 import html
+import re
 
 from ai_book2video.script import Scene
 
@@ -59,13 +60,35 @@ def _fill_box(origin: str) -> str:
     return f"transform-box:fill-box;transform-origin:{origin};"
 
 
+WORD_CUE = re.compile(r"^w:(?P<word>[^#+\-]+?)(?:#(?P<nth>\d+))?(?P<offset>[+-][0-9.]+)?$")
+
+
+def word_time(word: str, cues: list, nth: int = 1) -> float | None:
+    """When the narrator starts saying `word` (its nth time), from the cue rows' word lists.
+    A cue matches the start of a spoken word, so "w:ten" finds "ten-year-old"."""
+    key = re.sub(r"[^0-9a-z]", "", word.lower())
+    seen = 0
+    for cue in cues:
+        for spoken, start in (cue[4] if len(cue) > 4 else []):
+            if spoken.startswith(key):
+                seen += 1
+                if seen == nth:
+                    return float(start)
+    return None
+
+
 def when(value, cues: list, default: float = 0.0) -> float:
-    """A time in seconds. Numbers pass through; "s2" is the start of sentence 2; "s2+0.5" adds an offset."""
+    """A time in seconds. Numbers pass through; "s2" is the start of sentence 2; "s2+0.5" adds an offset;
+    "w:knife" is the moment the narrator says "knife" ("w:knife#2" the second time, "w:knife-0.3" a bit before)."""
     if value is None:
         return default
     if isinstance(value, (int, float)):
         return float(value)
     text = str(value).strip().lower()
+    match = WORD_CUE.match(text)
+    if match:
+        at = word_time(match["word"], cues, int(match["nth"] or 1))
+        return (default if at is None else at) + float(match["offset"] or 0)
     if not text.startswith("s"):
         return float(text)
     offset = 0.0
@@ -414,6 +437,148 @@ def actor(prefix: str, index: int, spec: dict, palette: dict, tl, cues: list) ->
             f'{figure}{bubbles}</g></g>')
 
 
+IMPACT = {"BANG", "BOOM", "CRASH", "STAB", "WHACK", "SNAP", "SCREECH", "SLAP", "ZING", "OUCH", "THUD", "POW", "WHAM"}
+SAD = {"FAIL", "FAILURE", "LOST", "FLOP", "DISASTER", "NO", "OOPS"}
+HAPPY = {"WIN", "PASS", "BRAVO", "CHEERS", "YUM", "FREE", "FAMOUS", "ELECTED", "WORDS", "FACTS", "CABINET",
+         "CHANCELLOR", "GO", "YES", "GOT", "ETON", "WOW", "HOORAY"}
+
+
+def burst_kind(text: str) -> str:
+    """What a burst means, from its word: BANG is an impact, FAIL is sad, BRAVO is happy, ? asks."""
+    words = set(re.findall(r"[A-Z]+", text.upper()))
+    if words & IMPACT:
+        return "impact"
+    if words & SAD:
+        return "sad"
+    if words & HAPPY:
+        return "chime"
+    if "?" in text:
+        return "question"
+    return "pop"
+
+
+# --- director camera ----------------------------------------------------------------------------
+# Rules from studying explainer films (see LESSONS.md): ask where the viewer should look; hold still
+# when the picture itself moves; slow moves (push, glide, pull) carry the eye between things; a fast
+# push is kept for the accents (an impact, a fall); every push in is answered by a pull or a glide;
+# never three pushes in a row; no endless creeping zoom.
+MEDIUM, CLOSE, PUNCH = 1.22, 1.42, 1.3
+MOVE = {"push": 0.9, "glide": 0.7, "pull": 1.1, "punch": 0.28}
+
+
+def _aim(zoom: float, x: float, y: float) -> tuple[float, float]:
+    """Camera offset that puts portrait point (x, y) in the middle at this zoom, without showing an edge."""
+    cx, cy = WIDTH / 2, HEIGHT / 2
+    tx = max(-cx * (zoom - 1), min(cx * (zoom - 1), -zoom * (x - cx)))
+    ty = max(-cy * (zoom - 1), min(cy * (zoom - 1), -zoom * (y - cy) - 120))
+    return tx, ty
+
+
+def _beat_events(spec: dict, cues: list) -> dict:
+    """What happens in the scene, with times and places: accents, speakers, things in motion."""
+    accents, speakers, movers = [], [], []
+    for item in spec.get("props", []):
+        x = float(item.get("x", 0)) * SCALE
+        if item.get("type") == "burst":
+            at = when(item.get("at"), cues, 1.0)
+            kind = burst_kind(str(item.get("text", "!")))
+            accents.append((at, x, float(item.get("y", GROUND - 300)), 2 if kind == "impact" else 1))
+        elif item.get("type") in ("car", "train", "letter") and item.get("to") is not None:
+            at = when(item.get("at"), cues)
+            movers.append((at, at + float(item.get("dur", 3))))
+    for item in spec.get("actors", []):
+        at = when(item.get("at"), cues)
+        if item.get("action") == "fall":
+            accents.append((at, actor_x(item, at, cues), GROUND - CHEST, 3))
+        elif item.get("action") == "walk" and item.get("to") is not None:
+            movers.append((at, at + float(item.get("dur", 3))))
+        for line in item.get("say", []):
+            t = when(line.get("at"), cues, 0.5)
+            speakers.append((t, item))
+    return {"accents": accents, "speakers": speakers, "movers": movers}
+
+
+def _director(spec: dict, cues: list, duration: float, tl, offset: int = 0) -> None:
+    """A new framing per sentence, chosen for what the sentence shows, not one move repeated.
+    `offset` (the scene number) carries the move pattern on from scene to scene."""
+    actors = spec.get("actors", [])
+    beats = cues or [[0.0, duration, "", ""]]
+    events = _beat_events(spec, cues)
+    tl.start("cam", x=0, y=0, s=1)
+    zoom, focus = 1.0, None  # current framing
+    pushes = 0  # pushes in a row
+    accents_left = max(1, len(beats) // 3)  # accents are bold type: at most a third of the sentences
+    rotation = offset
+
+    def go(kind: str, at: float, new_zoom: float, x: float, y: float) -> None:
+        nonlocal zoom
+        tx, ty = _aim(new_zoom, x, y) if new_zoom > 1.0 else (0.0, 0.0)
+        ease = "out" if kind == "punch" else "inOut"
+        tl.add("cam", "s", new_zoom, at, MOVE[kind], ease)
+        tl.add("cam", "x", tx, at, MOVE[kind], ease)
+        tl.add("cam", "y", ty, at, MOVE[kind], ease)
+        zoom = new_zoom
+
+    def actor_point(item, t):
+        return actor_x(item, t, cues), GROUND - CHEST
+
+    for index, cue in enumerate(beats):
+        start, end = float(cue[0]), float(cue[1])
+        hits = sorted((a for a in events["accents"] if start <= a[0] < end), key=lambda a: -a[3])
+        moving = any(m0 < end and m1 > start for m0, m1 in events["movers"])
+        if index == 0:
+            # Open on the whole stage. A long first sentence then eases in on the main character.
+            if actors and not hits and not moving and end - start > 4.5:
+                x, y = actor_point(actors[0], start + 1.6)
+                go("push", start + 1.6, MEDIUM, x, y)
+                focus, pushes = actors[0], 1
+            continue
+        talk = [s for s in events["speakers"] if start - 0.3 <= s[0] < end]
+        if hits and accents_left > 0:
+            at, x, y, _ = hits[0]
+            if zoom >= PUNCH:  # make room for the hit first
+                go("pull", start, 1.0, 0, 0)
+            go("punch", max(start, at - 0.05), max(PUNCH, zoom + 0.08) if zoom < PUNCH else PUNCH, x, y)
+            accents_left -= 1
+            pushes = 0
+            focus = None
+            continue
+        if moving:
+            if zoom > 1.0:
+                go("pull", start, 1.0, 0, 0)  # show the whole movement; the picture is busy enough
+            pushes = 0
+            continue
+        if talk and pushes < 2:
+            t, speaker = talk[0]
+            x, y = actor_point(speaker, t)
+            go("push", start, max(zoom, MEDIUM), x, y)
+            focus, pushes = speaker, pushes + 1
+            continue
+        choice = ("push", "glide", "pull", "hold")[rotation % 4]
+        rotation += 1
+        if choice == "push" and (pushes >= 2 or zoom >= CLOSE or not actors):
+            choice = "pull" if zoom > 1.0 else "hold"
+        if choice == "glide" and (zoom == 1.0 or len(actors) < 2):
+            choice = "push" if actors and pushes < 2 and zoom < CLOSE else "hold"
+        if choice == "pull" and zoom == 1.0:
+            choice = "hold"
+        if choice == "push":
+            target = actors[index % len(actors)]
+            x, y = actor_point(target, start + 0.5)
+            go("push", start, MEDIUM if zoom < MEDIUM else CLOSE, x, y)
+            focus, pushes = target, pushes + 1
+        elif choice == "glide":
+            others = [a for a in actors if a is not focus] or actors
+            target = others[index % len(others)]
+            x, y = actor_point(target, start + 0.5)
+            go("glide", start, zoom, x, y)
+            focus, pushes = target, 0
+        elif choice == "pull":
+            go("pull", start, 1.0, 0, 0)
+            focus, pushes = None, 0
+        # "hold": no move. The stage keeps breathing, blinking and moving on its own.
+
+
 def _camera(spec: dict, cues: list, duration: float, tl) -> None:
     """Cut to a new shot on every sentence: wide, then medium on one actor, then close on another."""
     actors = spec.get("actors", [])
@@ -441,7 +606,11 @@ def _camera(spec: dict, cues: list, duration: float, tl) -> None:
             tl.add("cam", "s", zoom + 0.05, start + move, drift_end - start - move, "linear")
 
 
-def stage(scene: Scene, palette: dict, tl, cues: list | None = None, duration: float = 6.0) -> str:
+CAMERAS = ("classic", "director")
+
+
+def stage(scene: Scene, palette: dict, tl, cues: list | None = None, duration: float = 6.0, camera: str = "classic") -> str:
+    """`camera` is the script's default camera; a stage's own "camera" (false, "classic" or "director") wins."""
     cues = cues or []
     spec = scene.stage or {}
     parts = [background(spec.get("background", "plain"), palette, split=bool(spec.get("split", False)))]
@@ -449,7 +618,12 @@ def stage(scene: Scene, palette: dict, tl, cues: list | None = None, duration: f
         parts.append(prop("s", index, item, palette, tl, cues))
     for index, item in enumerate(spec.get("actors", [])):
         parts.append(actor("s", index, item, palette, tl, cues))
-    if spec.get("camera", True):
+    mode = spec.get("camera", True)
+    if mode is True:
+        mode = camera
+    if mode == "director":
+        _director(spec, cues, duration, tl, scene.index)
+    elif mode:
         _camera(spec, cues, duration, tl)
     camera = f'<g data-id="cam" style="transform-box:view-box;transform-origin:{WIDTH / 2:.0f}px {HEIGHT / 2:.0f}px;">{"".join(parts)}</g>'
     return (f'<svg class="stage-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} {HEIGHT}" '

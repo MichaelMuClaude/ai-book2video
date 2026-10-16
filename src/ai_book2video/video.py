@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,7 @@ CAPTURE = HERE / "capture.mjs"
 FPS = 30
 MIN_SCENE_SECONDS = 4.0
 TAIL_SECONDS = 0.8
+LOUDNESS = -16.0  # LUFS for the finished film: about what phone video apps play at
 SFX_VOLUME = 1.0  # multiplies the built-in sound effect levels (sfx.LEVELS)
 DEFAULT_JOBS = max(1, min(4, (os.cpu_count() or 4) // 8))  # scenes rendered at the same time; kept low so the CPU stays cool
 
@@ -32,16 +34,35 @@ class SceneTiming:
     start: float
 
 
-def scene_cues(scene: Scene, start: float, end: float) -> list[subtitles.Cue]:
-    """Subtitles for one scene: English narration with its Chinese pair when given."""
+def scene_cues(scene: Scene, start: float, end: float, spoken: list | None = None) -> list[subtitles.Cue]:
+    """Subtitles for one scene: English narration with its Chinese pair when given.
+    With `spoken` word timings (from Kokoro) each sentence starts exactly when it is said;
+    without them, time is shared out by sentence length."""
     english = subtitles.sentences(scene.narration) or [scene.narration]
+    chinese = subtitles.sentences(scene.narration_zh) if scene.narration_zh else []
+    if spoken:
+        return subtitles.timed_cues(english, chinese, spoken, start, end)
     if scene.narration_zh:
-        return subtitles.pair_cues(english, subtitles.sentences(scene.narration_zh), start, end)
-    return subtitles.cues_for(scene.narration, start, end)
+        cues = subtitles.pair_cues(english, chinese, start, end)
+    else:
+        cues = subtitles.cues_for(scene.narration, start, end)
+    for cue in cues:
+        subtitles.estimate_words(cue)
+    return cues
+
+
+def spoken_words(wav: Path) -> list:
+    """Word timings Kokoro wrote next to the narration, or [] when there are none."""
+    path = wav.with_suffix(".words.json")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
 
 
 def cue_rows(cues: list[subtitles.Cue]) -> list[list]:
-    return [[round(c.start, 3), round(c.end, 3), c.text, c.zh] for c in cues]
+    """[start, end, english, chinese, words] per cue; words are [[word, start], ...] for "w:" cues."""
+    return [[round(c.start, 3), round(c.end, 3), c.text, c.zh, c.words] for c in cues]
 
 
 def require_ffmpeg() -> str:
@@ -120,16 +141,43 @@ def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path, encoder
         raise Book2VideoError(f"ffmpeg failed on {out.name}: {result.stderr.strip()[-400:]}")
 
 
-def join_clips(clips: list[Path], out: Path, workdir: Path) -> None:
+def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | None = LOUDNESS) -> dict | None:
+    """Join the scene clips in order. With `loudness` (LUFS), bring the sound to that level, measured
+    over the whole film first (two-pass loudnorm), so phones play it as loud as other videos. It is a
+    plain gain when the peaks allow; otherwise loudnorm gently limits the loudest peaks to keep 1.5 dB
+    of headroom. The picture is copied, not re-encoded."""
     listing = workdir / "clips.txt"
     listing.write_text("".join(f"file '{clip.resolve()}'\n" for clip in clips), encoding="utf-8")
+    joined = out if loudness is None else workdir / "joined.mp4"
     result = subprocess.run(
-        [require_ffmpeg(), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", "-movflags", "+faststart", str(out)],
+        [require_ffmpeg(), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", "-movflags", "+faststart", str(joined)],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         raise Book2VideoError(f"joining clips failed: {result.stderr.strip()[-400:]}")
+    if loudness is None:
+        return None
+    target = f"I={loudness}:TP=-1.5:LRA=11"
+    measure = subprocess.run(
+        [require_ffmpeg(), "-hide_banner", "-nostats", "-i", str(joined), "-vn", "-af", f"loudnorm={target}:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", measure.stderr)
+    if measure.returncode != 0 or not found:
+        raise Book2VideoError(f"measuring loudness failed: {measure.stderr.strip()[-400:]}")
+    m = json.loads(found.group(0))
+    apply = (f"loudnorm={target}:linear=true:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+             f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}")
+    result = subprocess.run(
+        [require_ffmpeg(), "-y", "-loglevel", "error", "-i", str(joined), "-c:v", "copy", "-af", apply, "-ar", "48000",
+         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise Book2VideoError(f"loudness step failed: {result.stderr.strip()[-400:]}")
+    joined.unlink(missing_ok=True)
+    return {"target_lufs": loudness, "measured_lufs": float(m["input_i"]), "measured_peak": float(m["input_tp"])}
 
 
 def build(
@@ -147,6 +195,8 @@ def build(
     encoder: str = "cpu",
     effects: bool = False,
     effects_volume: float = SFX_VOLUME,
+    camera: str | None = None,
+    loudness: float | None = LOUDNESS,
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
@@ -175,14 +225,15 @@ def build(
     for scene in scenes:
         wav = audio_dir / f"scene{scene.index:03d}.wav"
         if tts != "kokoro":
+            wav.with_suffix(".words.json").unlink(missing_ok=True)  # no stale timings from an earlier Kokoro run
             speech.synthesize(scene.narration, wav, backend=tts, voice=voice, rate=rate, command=tts_command)
         spoken = speech.duration(wav)
         seconds = max(MIN_SCENE_SECONDS, spoken + TAIL_SECONDS)
         page = pages_dir / f"scene{scene.index:03d}.html"
-        local_cues = scene_cues(scene, 0.0, spoken)
+        local_cues = scene_cues(scene, 0.0, spoken, spoken_words(wav))
         page.write_text(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter,
-                              script.palettes),
+                              script.palettes, camera or script.camera),
             encoding="utf-8",
         )
         clip = clips_dir / f"scene{scene.index:03d}.mp4"
@@ -213,7 +264,7 @@ def build(
         for future in [pool.submit(render, job) for job in jobs_list]:
             future.result()
     out.parent.mkdir(parents=True, exist_ok=True)
-    join_clips(clip_paths, out, workdir)
+    levels = join_clips(clip_paths, out, workdir, loudness)
     srt = out.with_suffix(".srt")
     if subtitles_file:
         subtitles.write_srt(cues, srt)
@@ -228,13 +279,15 @@ def build(
         "orientation": "portrait 1080x1920",
         "encoder": encoder,
         "sound_effects": effects,
+        "camera": camera or script.camera,
+        "loudness": levels,
         "scenes": [timing.__dict__ for timing in timings],
     }
     (workdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
 
 
-def preview(script: Script, outdir: Path, only: set[int] | None = None) -> list[Path]:
+def preview(script: Script, outdir: Path, only: set[int] | None = None, camera: str | None = None) -> list[Path]:
     """Render three key frames per scene (early, middle, late) as JPEG files, for a quick look."""
     find_node()
     find_chrome()
@@ -248,7 +301,7 @@ def preview(script: Script, outdir: Path, only: set[int] | None = None) -> list[
         cues = scene_cues(scene, 0.0, max(1.0, seconds - TAIL_SECONDS))
         page.write_text(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(cues), script.book, script.chapter,
-                              script.palettes),
+                              script.palettes, camera or script.camera),
             encoding="utf-8",
         )
         frames = outdir / f"scene{scene.index:03d}"

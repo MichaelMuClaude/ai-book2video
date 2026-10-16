@@ -489,14 +489,14 @@ def _actor(prefix: str, index: int, spec: dict, palette: dict, tl: Timeline) -> 
     return html_
 
 
-def _stage(scene: Scene, duration: float, palette: dict, cues: list | None = None) -> tuple[str, Timeline]:
+def _stage(scene: Scene, duration: float, palette: dict, cues: list | None = None, camera: str = "classic") -> tuple[str, Timeline]:
     """Stick-figure stage. SVG by default (colourful, hand-drawn look); "style": "html" uses the old divs."""
     spec = scene.stage or {}
     if spec.get("style", "svg") != "html":
         from ai_book2video import svgstage
 
         tl = Timeline()
-        svg = svgstage.stage(scene, palette, tl, cues or [], duration)
+        svg = svgstage.stage(scene, palette, tl, cues or [], duration, camera)
         heading = ""
         if scene.heading:
             size = _heading_size(scene.heading, big=110, mid=92, small=76)
@@ -550,12 +550,12 @@ def _pick(scene: Scene, index: int, palettes: list[dict] | None = None) -> dict:
 
 
 def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list | None = None, book: str = "", chapter: str = "",
-               palettes: list[dict] | None = None) -> str:
+               palettes: list[dict] | None = None, camera: str = "classic") -> str:
     """Full HTML page for one scene. `cues` is a list of [start, end, english, chinese] in scene seconds.
     `palettes` replaces the built-in colour sets (scenes take them in turn)."""
     palette = _pick(scene, index, palettes)
     if scene.kind == "stage":
-        body, timeline = _stage(scene, duration, palette, cues)
+        body, timeline = _stage(scene, duration, palette, cues, camera)
     else:
         body, timeline = TEMPLATES[scene.kind](scene, duration, palette)
     return _wrapper_page(palette, body, timeline, duration, title, cues=cues, book=book, chapter=chapter)

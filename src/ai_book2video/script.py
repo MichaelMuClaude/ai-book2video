@@ -27,6 +27,8 @@ from pathlib import Path
 from ai_book2video.errors import Book2VideoError
 from ai_book2video.text import count_words
 
+WORD_CUE = re.compile(r"^w:(?P<word>[^#+\-]+?)(?:#(?P<nth>\d+))?(?P<offset>[+-][0-9.]+)?$")
+
 KINDS = ("title", "text", "bullets", "quote", "stat", "stage")
 PROPS = ("car", "train", "tree", "sun", "fire", "building", "podium", "book", "burst", "letter", "clock", "wall", "crate", "chair", "easel")
 BACKGROUNDS = ("street", "field", "room", "plain", "night")
@@ -76,6 +78,7 @@ class Script:
     book: str = ""
     chapter: str = ""
     palettes: list[dict] = field(default_factory=list)
+    camera: str = "classic"
 
     @property
     def seconds_estimate(self) -> float:
@@ -86,6 +89,19 @@ def _words(text: str) -> int:
     return count_words(text)
 
 
+def _times(scene: dict) -> list:
+    """Every "at" value in a stage: actors, their faces and speech, and props."""
+    stage = scene.get("stage") if isinstance(scene.get("stage"), dict) else {}
+    found = []
+    for item in list(stage.get("actors", [])) + list(stage.get("props", [])):
+        if not isinstance(item, dict):
+            continue
+        found.append(item.get("at"))
+        for key in ("faces", "say"):
+            found += [entry.get("at") for entry in item.get(key, []) if isinstance(entry, dict)]
+    return [at for at in found if at is not None]
+
+
 def check(raw: dict) -> tuple[list[str], list[str]]:
     """Return (errors, warnings) for a raw script dict."""
     errors: list[str] = []
@@ -94,6 +110,8 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
         return ["the script must be a JSON object"], []
     if not str(raw.get("title", "")).strip():
         errors.append("missing top-level 'title'")
+    if raw.get("camera", "classic") not in ("classic", "director"):
+        errors.append("top-level 'camera' must be classic or director")
     palettes = raw.get("palettes")
     if palettes is not None:
         if not isinstance(palettes, list) or not palettes:
@@ -153,11 +171,29 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
                 errors.append(f"{where}: narration_zh has {zh_count} sentences but narration has {en_count}; they must pair one to one")
         elif narration and not zh:
             warnings.append(f"{where}: no 'narration_zh'; the subtitle will be English only")
+        for at in _times(scene):
+            text = str(at).strip().lower()
+            if isinstance(at, str) and text.startswith("w:"):
+                match = WORD_CUE.match(text)
+                if not match:
+                    errors.append(f"{where}: word cue {at!r} should look like w:word, w:word#2 or w:word+0.3")
+                    continue
+                key = re.sub(r"[^0-9a-z]", "", match["word"])
+                count = sum(1 for token in narration.split() if re.sub(r"[^0-9a-z]", "", token.lower()).startswith(key))
+                if count < int(match["nth"] or 1):
+                    errors.append(f"{where}: word cue {at!r}: the narration says {match['word']!r} {count} time(s)")
         if kind == "stage":
             stage = scene.get("stage")
             if not isinstance(stage, dict):
                 errors.append(f"{where}: 'stage' scenes need a 'stage' object (background, actors, props)")
             else:
+                actors = [a for a in stage.get("actors", []) if isinstance(a, dict)]
+                props = [p for p in stage.get("props", []) if isinstance(p, dict)]
+                lively = (any(a.get("action", "stand") != "stand" or a.get("say") or a.get("faces") for a in actors)
+                          or any(p.get("type") == "burst" or p.get("to") is not None or p.get("type") == "clock" for p in props))
+                if not lively:
+                    warnings.append(f"{where}: nothing happens on stage (no action, speech, face change, burst or movement); "
+                                    "it will look like a slide, so give someone something to do")
                 for actor in stage.get("actors", []):
                     if not isinstance(actor, dict) or actor.get("action", "stand") not in ("stand", "walk", "fall", "talk", "wave"):
                         errors.append(f"{where}: actor action must be stand, walk, fall, talk or wave")
@@ -226,4 +262,5 @@ def load(path: Path) -> Script:
         book=str(raw.get("book", "")).strip(),
         chapter=str(raw.get("chapter", "")).strip(),
         palettes=[dict(palette) for palette in raw.get("palettes") or []],
+        camera=str(raw.get("camera", "classic")),
     )

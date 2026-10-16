@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ai_book2video import __version__, browser, ingest, motion, reference, script as scripts, speech, video
+from ai_book2video import __version__, browser, check as checker, ingest, motion, reference, script as scripts, speech, video
 from ai_book2video.errors import Book2VideoError
 
 
@@ -84,7 +84,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 def cmd_preview(args: argparse.Namespace) -> int:
     script = scripts.load(Path(args.script))
     out = Path(args.output)
-    frames = video.preview(script, out, only=parse_scenes(args.scenes))
+    frames = video.preview(script, out, only=parse_scenes(args.scenes), camera=args.camera)
     print(f"wrote {len(frames)} preview frames to {out}")
     return 0
 
@@ -110,6 +110,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         jobs=args.jobs,
         encoder=args.encoder,
         effects=args.sfx,
+        camera=args.camera,
+        loudness=None if args.loudness == 0 else args.loudness,
         effects_volume=args.sfx_volume,
     )
     minutes, seconds = divmod(manifest["seconds"], 60)
@@ -129,6 +131,14 @@ def cmd_analyze_ref(args: argparse.Namespace) -> int:
     if report["contact_sheet"]:
         print(f"look at the contact sheet: {report['contact_sheet']}")
     return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    report = checker.check(Path(args.video))
+    print(checker.summary(report))
+    if args.json:
+        Path(args.json).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return 0 if report["passed"] else 1
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
@@ -186,6 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("script")
     p.add_argument("-o", "--output", default="preview")
     p.add_argument("--scenes", help="e.g. 1,3,5-7")
+    p.add_argument("--camera", choices=("classic", "director"), help="camera style (overrides the script's \"camera\")")
     p.set_defaults(func=cmd_preview)
 
     p = sub.add_parser("build", help="render the narrated MP4 (and an SRT file)")
@@ -193,6 +204,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="output .mp4")
     p.add_argument("--work", help="working folder (default: the output name without .mp4)")
     p.add_argument("--keep-frames", action="store_true", help="keep the captured frame images in the working folder")
+    p.add_argument("--camera", choices=("classic", "director"),
+                   help="camera style for every stage scene (overrides the script's \"camera\"): classic moves to the next "
+                        "framing on every sentence; director picks the move for what each sentence shows")
+    p.add_argument("--loudness", type=float, default=video.LOUDNESS,
+                   help=f"bring the finished film to this loudness in LUFS (default {video.LOUDNESS}; 0 leaves it as it is)")
     p.add_argument("--sfx", action="store_true",
                    help="add sound effects made in code (bursts, falls, trains, footsteps, scene wipes) under the narration")
     p.add_argument("--sfx-volume", type=float, default=video.SFX_VOLUME, help=f"sound effect level (default {video.SFX_VOLUME})")
@@ -213,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="folder for the report and contact sheet (default: <name>-reference next to it)")
     p.add_argument("--threshold", type=float, default=0.3, help="how big a change counts as a cut, 0-1 (default 0.3)")
     p.set_defaults(func=cmd_analyze_ref)
+
+    p = sub.add_parser("check", help="measure a finished video: motion per scene, frozen stretches, jumps, blank frames, sound")
+    p.add_argument("video")
+    p.add_argument("--json", help="also write the full report here")
+    p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("doctor", help="check the tools this needs")
     p.set_defaults(func=cmd_doctor)

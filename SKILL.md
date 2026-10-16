@@ -21,8 +21,11 @@ ai-book2video validate chapter.script.json             # check the script and th
 ai-book2video preview chapter.script.json -o preview   # three frames per scene
 ai-book2video build chapter.script.json -o sample.mp4 --scenes 1,14,30 --sfx  # a short sample first
 ai-book2video build chapter.script.json -o chapter.mp4 --sfx                   # the full render (Kokoro voice by default)
+ai-book2video check chapter.mp4                        # measure the finished film: motion, frozen stretches, jumps, sound
 ai-book2video analyze-ref reference.mp4                # measure a reference video or picture to copy its style
 ```
+
+Before you start, read `LESSONS.md` in this skill's folder: what has worked and what went wrong, with evidence.
 
 ## Workflow for one chapter
 
@@ -38,8 +41,10 @@ ai-book2video analyze-ref reference.mp4                # measure a reference vid
 6. **Validate.** Fix every error. A sentence-count mismatch means a narration and its translation do not pair.
 7. **Preview and look.** Run `preview` and read the frames. Check: labels do not overlap (keep actors at least 400 apart on the 0–1920 scale, use short labels), bursts sit above heads (`y` about 500–700), speech bubbles stay in the frame, nothing important is hidden by the caption box at the bottom.
 8. **Sample before the full render.** Render two or three scenes with `--scenes`: the opening hook, the busiest action scene and one quiet scene. Look at frames, and ask the user to watch and listen when the look or the sound is new. Fix what is wrong in the script, then render everything. A full chapter takes minutes; a sample takes about one, so mistakes are cheap to find here.
-9. **Build** in the background (scenes render in parallel with `--jobs`; a full chapter takes about 5 minutes on 32 cores, longer on smaller machines) and check the result: duration, `manifest.json`, and a few frames taken with `ffmpeg -ss <t> -i out.mp4 -frames:v 1 frame.jpg` around the timed moments.
-10. **Deliver.** Report the length, number of scenes and file paths. If the user keeps books in one folder per book, put the MP4 and SRT next to the book.
+9. **Build** in the background (run the build command itself as the background job; do not add a second `&`) (scenes render in parallel with `--jobs`; a full chapter takes about 5 minutes on 32 cores, longer on smaller machines) and check the result: duration, `manifest.json`, and a few frames taken with `ffmpeg -ss <t> -i out.mp4 -frames:v 1 frame.jpg` around the timed moments.
+10. **Check with numbers.** Run `check` on the MP4. Fix every red item (a scene that hardly moves, a jump, blank frames, a silent scene) and look at the yellow ones at normal speed.
+11. **Independent review.** If you can start a separate agent, give it only the finished video (or frames from every scene), the script and the chapter notes, and ask it to check facts, names, dates and numbers, whether each picture shows what the narration says, labels and text, and anything that looks broken. If you cannot, review it yourself as a stranger would, against the same list. Camera rhythm cannot be judged from still frames: ask the user to watch at normal speed.
+12. **Deliver.** Report the length, number of scenes and file paths. If the user keeps books in one folder per book, put the MP4 and SRT next to the book.
 
 ## Script format
 
@@ -74,8 +79,9 @@ ai-book2video analyze-ref reference.mp4                # measure a reference vid
 - **Backgrounds:** `street`, `field`, `room`, `plain`, `night` (dark sky, stars and moon); `"split": true` adds two colour blocks.
 - **Colours:** scenes take the built-in colour sets in turn. A top-level `"palettes": [{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}, ...]` replaces them (text colours are worked out for contrast; add `ink` and `card_ink` to choose them). Use it to give a book its own look, or to follow a reference.
 - **Sound:** with `--sfx`, things make a sound when they happen. Bursts choose by their word (BANG hits, FAIL droops, BRAVO chimes, `?` asks). Falls thud, trains whistle and chug, cars rumble past, letters swish, clocks tick, walkers step, bubbles pop, and each scene whooshes into the next. Any prop or actor can set `"sfx"` to `impact`, `chime`, `sad`, `question`, `pop` or `none`.
-- **Timing:** seconds, or `"s2"` / `"s2+0.5"` / `"s3-1"` for a sentence start plus an offset. To make a moving car hit someone exactly on a sentence, start it about half its travel time earlier (`"at": "s2-1.2"` with `"dur": 2.4`).
-- **Camera:** on by default; every sentence is a new shot. Set `"camera": false` on a stage for a still scene.
+- **Timing:** seconds; `"s2"` / `"s2+0.5"` / `"s3-1"` for a sentence start plus an offset; or `"w:knife"` for the moment the narrator says a word (`"w:knife#2"` the second time, `"w:knife-0.3"` a little before). Prefer word cues for anything that should land on a word: with Kokoro they come from the voice's own word timings, so they are exact. A cue matches the start of a word, so `w:ten` finds "ten-year-old". `validate` rejects words the narration does not say. To make a moving car hit someone exactly on a sentence, start it about half its travel time earlier (`"at": "s2-1.2"` with `"dur": 2.4`).
+- **Camera:** on by default. `"camera": "classic"` (the default) moves to the next framing on every sentence, wide → medium → close, with a slow push. `"camera": "director"` (top level, per stage, or `--camera director`) chooses the move for what each sentence shows: it opens wide, holds while something moves across the stage, eases toward a speaker, pushes in fast only on an impact or a fall, answers a push in with a pull or a glide, and never pushes in three times in a row. `"camera": false` on a stage keeps it still.
+- **Something must happen in every stage scene:** an action, speech, a face change, a burst or movement. `validate` warns about scenes where nothing does; they look like slides.
 - Other kinds (`title`, `text`, `bullets`, `quote`, `stat`) exist for credits and key points; use them sparingly.
 
 ## Matching a reference style
@@ -99,10 +105,11 @@ You cannot hear the result, so check it in other ways: compare loudness with `ff
 - **Copyright.** Summarise in your own words. At most one short quotation per video, under 15 words, attributed. Never reproduce passages. Name the source in the closing credit scene. Do not use the book's cover or illustrations.
 - **Real people.** Show real people only as labelled stick figures, never as likenesses.
 - **One idea per scene.** If a narration needs two ideas, split the scene.
+- **No unrequested additions.** Do not add story jokes, characters or running gags the user did not ask for; show them in a sample and wait for a yes.
 
 ## Limits
 
 - Rendering is about 3 seconds of compute per second of video (headless Chrome captures every frame); `--jobs` renders several scenes at once.
-- Files are about 45 MB per minute; compress a copy (for example `-crf 28 -vf scale=720:-2`) before sending it to a phone.
+- The finished film is brought to -16 LUFS (`--loudness`, 0 to leave it as it is). Files are about 45 MB per minute; compress a copy (for example `-crf 28 -vf scale=720:-2`) before sending it to a phone.
 - The stage has a fixed set of backgrounds, actions, faces and props; new kinds need code in `svgstage.py`.
 - No background music yet. Sound effects are simple synthesised ones and are off unless `--sfx` is given.

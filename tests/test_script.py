@@ -103,6 +103,22 @@ class PaletteTests(unittest.TestCase):
         errors, _ = script.check(raw)
         self.assertTrue(any("palette 1: 'bg'" in e for e in errors))
 
+class WordCueTests(unittest.TestCase):
+    def stage(self, at):
+        return {"title": "T", "scenes": [{"kind": "stage", "narration": "He grabs the knife. Then the knife falls.",
+                                          "narration_zh": "他抓起刀。然后刀掉了。",
+                                          "stage": {"actors": [{"x": 900, "action": "fall", "at": at}]}}]}
+
+    def test_known_words_pass(self):
+        for at in ("w:knife", "w:knife#2", "w:grabs+0.3", "w:Knife-0.2"):
+            errors, _ = script.check(self.stage(at))
+            self.assertEqual(errors, [], at)
+
+    def test_missing_or_too_many_words_fail(self):
+        for at in ("w:sword", "w:knife#3", "w:#2"):
+            errors, _ = script.check(self.stage(at))
+            self.assertTrue(any("word cue" in e for e in errors), at)
+
 
 if __name__ == "__main__":
     unittest.main()

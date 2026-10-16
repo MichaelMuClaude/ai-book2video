@@ -8,6 +8,9 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **Actions land on the words**: an action can be timed to a narration sentence (`"at": "s2"`), so the car hits exactly when the narrator says it does.
 - **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
 - **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
+- **Timed to the voice**: subtitles start when each sentence is actually spoken, from Kokoro's word timings, and actions can land on a word (`"at": "w:knife"`).
+- **A director camera** (`"camera": "director"`): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move.
+- **Checked with numbers** (`check`): motion per scene, frozen stretches, jumps, blank frames, silent scenes and loudness, before anyone watches. The finished film is levelled to -16 LUFS.
 - **Sound effects made in code** (`--sfx`): bangs, thuds, train whistles and chugs, footsteps, ticking clocks, pops and whooshes, synthesised from tones and noise and timed to the action. No sound files to download or license.
 - **Learn a style from a reference** (`analyze-ref`): measure a video or picture you like (cuts, shot lengths, colours, motion), get a contact sheet and starter colour palettes, and give the book its own look with a `palettes` list.
 
@@ -25,8 +28,11 @@ ai-book2video validate chapter3.script.json            # check it, including the
 ai-book2video preview chapter3.script.json -o preview  # three frames per scene, to check layout and motion
 ai-book2video build chapter3.script.json -o sample.mp4 --scenes 1,14,30 --sfx   # sample a few scenes first
 ai-book2video build chapter3.script.json -o chapter3.mp4 --sfx   # narration, frames, sound, MP4 and SRT
+ai-book2video check chapter3.mp4                       # motion, frozen stretches, jumps, sound: red items block delivery
 ai-book2video analyze-ref liked-video.mp4              # pacing, colours and motion of a style to follow
 ```
+
+`LESSONS.md` collects what has worked and what went wrong, with evidence.
 
 Render a sample of two or three scenes (the hook, the busiest scene, a quiet one) before the full chapter: a sample takes about a minute, so the look and the sound are cheap to fix there.
 
@@ -101,7 +107,8 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 | actor `say` | speech bubbles: `[{"text": "...", "at": "s2", "dur": 2.5}]` |
 | actor `label`, `colour` | a short name above the head; a body colour |
 | prop `type` | `car`, `train` (move with `to`; `armoured`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`), `letter` (`y`, `to`), `clock` (`spin`, `at`, `dur`), `wall` (`w`, `h`), `crate` (`text`), `chair`, `easel` |
-| `camera` | `true` by default: a new shot on every sentence |
+| `camera` | top level, per stage or `--camera`: `classic` (default; a new framing on every sentence), `director` (the move fits what each sentence shows), or `false` on a stage |
+| timing (`at`) | seconds, `"s2+0.5"` (sentence start), or `"w:knife"` (when that word is said; `#2` for the second time) |
 | `palettes` (top level) | colour sets scenes take in turn: `[{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}]`; text colours are chosen for contrast |
 | prop or actor `sfx` | with `--sfx`: `impact`, `chime`, `sad`, `question`, `pop` or `none` (otherwise chosen from the action or the burst's word) |
 
@@ -131,6 +138,7 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 - `src/ai_book2video/speech.py`, `tts_kokoro.py`: narration with Kokoro, espeak-ng or a custom command
 - `src/ai_book2video/subtitles.py`: sentence splitting, bilingual cues and SRT
 - `src/ai_book2video/sfx.py`: sound effects synthesised in code and placed on the action
+- `src/ai_book2video/check.py`: measures a finished film (motion per scene, frozen stretches, jumps, blank frames, sound)
 - `src/ai_book2video/reference.py`: reference analysis (cuts, shot lengths, colours, motion, contact sheet)
 - `src/ai_book2video/video.py`: clips per scene, rendered in parallel and joined into the final MP4
 - `src/ai_book2video/cli.py`: the `ai-book2video` commands
@@ -138,7 +146,10 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 
 ## Acknowledgements
 
-Two habits here were learned from [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video, and make sound effects in code instead of fetching sound files. The reference analysis follows its idea of studying a liked video shot by shot. No code was copied; the ideas were.
+We learn from other people's good work and say so. No code was copied; the ideas were.
+
+- [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video; make sound effects in code instead of fetching sound files; study a liked video shot by shot.
+- [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) by 花叔 (MIT): the camera rules behind the director camera (hold when the picture moves, fast moves only for accents, every push answered); cues that name a word instead of a second; measuring the finished film before delivery and failing slide-like scenes; independent review that checks facts as well as pictures; and keeping a lessons file with evidence.
 
 ## Licence
 

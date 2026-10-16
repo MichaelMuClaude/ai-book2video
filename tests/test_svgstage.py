@@ -28,6 +28,15 @@ class WhenTests(unittest.TestCase):
         self.assertEqual(svgstage.when("s2+0.5", CUES), 2.5)
         self.assertEqual(svgstage.when("s3-1", CUES), 3.5)
 
+    def test_word_cues(self):
+        rows = [[0.0, 2.0, "One knife.", "一。", [["one", 0.1], ["knife", 0.9]]],
+                [2.0, 4.5, "Two knifemen.", "二。", [["two", 2.1], ["knifemen", 2.8]]]]
+        self.assertEqual(svgstage.when("w:knife", rows), 0.9)
+        self.assertEqual(svgstage.when("w:knife#2", rows), 2.8)  # matches the start of "knifemen"
+        self.assertAlmostEqual(svgstage.when("w:two+0.5", rows), 2.6)
+        self.assertAlmostEqual(svgstage.when("w:knife-0.2", rows), 0.7)
+        self.assertEqual(svgstage.when("w:missing", rows, 1.0), 1.0)
+
     def test_out_of_range_sentence_uses_the_last(self):
         self.assertEqual(svgstage.when("s9", CUES), 4.5)
 
@@ -113,6 +122,45 @@ class PairTests(unittest.TestCase):
         self.assertEqual([c.zh for c in cues], ["一二三。", "四。"])
         self.assertAlmostEqual(cues[0].end, 3.0)
         self.assertAlmostEqual(cues[-1].end, 4.0)
+
+class DirectorCameraTests(unittest.TestCase):
+    CUES = [[float(i * 2), float(i * 2 + 2), f"Sentence {i}.", "句。"] for i in range(8)]
+
+    def camera_moves(self, stage):
+        raw = {"title": "T", "camera": "director", "scenes": [{"kind": "stage", "narration": " ".join(c[2] for c in self.CUES),
+                                                                "narration_zh": "句。" * 8, "stage": stage}]}
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "s.json"
+            path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+            loaded = script.load(path)
+        page = motion.scene_page(loaded.scenes[0], 1, "T", 16.0, self.CUES, camera=loaded.camera)
+        anims = json.loads(re.search(r"const ANIMS = (\[.*?\]); const INIT", page, re.S).group(1))
+        return [(a["at"], a["to"], a["dur"]) for a in anims if a["id"] == "cam" and a["p"] == "s"]
+
+    def test_director_follows_the_rules(self):
+        stage = {"actors": [{"label": "A", "x": 500, "action": "stand", "say": [{"text": "Hi", "at": "s3"}]},
+                            {"label": "B", "x": 1400, "action": "stand"},
+                            {"label": "C", "x": 900, "action": "walk", "to": 1200, "at": "s7", "dur": 1.5}],
+                 "props": [{"type": "burst", "x": 900, "y": 600, "at": "s5+0.4", "text": "BANG!"}]}
+        moves = self.camera_moves(stage)
+        self.assertFalse([m for m in moves if m[0] < 2.0], "the first sentence is an establishing shot")
+        punch = [m for m in moves if m[2] < 0.3]
+        self.assertEqual(len(punch), 1)
+        self.assertAlmostEqual(punch[0][0], 8.35, places=2)  # just before the BANG lands
+        at_walk = [m for m in moves if m[0] == 12.0]
+        self.assertTrue(not at_walk or at_walk[-1][1] == 1.0, "the walker is shown whole")
+        zooms, previous, run = [], 1.0, 0
+        for at, to, dur in moves:
+            run = run + 1 if to > previous else 0
+            self.assertLess(run, 3, "never three pushes in a row")
+            previous = to
+        self.assertLessEqual(len(punch), len(self.CUES) // 3)
+
+    def test_no_endless_creep(self):
+        moves = self.camera_moves({"actors": [{"label": "A", "x": 600, "action": "stand"}, {"label": "B", "x": 1300, "action": "stand"}]})
+        self.assertFalse([m for m in moves if m[2] > 1.5], "no slow linear drift on every shot")
+        self.assertTrue(any(to == 1.0 for _, to, _ in moves), "pushes in are answered by a pull back")
 
 
 if __name__ == "__main__":
