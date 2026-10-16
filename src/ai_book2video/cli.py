@@ -133,6 +133,13 @@ def cmd_analyze_ref(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_level(args: argparse.Namespace) -> int:
+    out = Path(args.output) if args.output else Path(args.video)
+    result = video.level_loudness(Path(args.video), out, args.loudness)
+    print(f"{out}: {result['measured_lufs']:.1f} LUFS -> {result['target_lufs']} LUFS (peak {result['measured_peak']:.1f} dBFS)")
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     report = checker.check(Path(args.video))
     print(checker.summary(report))
@@ -229,6 +236,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="folder for the report and contact sheet (default: <name>-reference next to it)")
     p.add_argument("--threshold", type=float, default=0.3, help="how big a change counts as a cut, 0-1 (default 0.3)")
     p.set_defaults(func=cmd_analyze_ref)
+
+    p = sub.add_parser("level", help="bring a finished video's loudness to a target LUFS, without re-rendering the picture")
+    p.add_argument("video")
+    p.add_argument("-o", "--output", help="write here instead of replacing the input")
+    p.add_argument("--loudness", type=float, default=video.LOUDNESS, help=f"target LUFS (default {video.LOUDNESS})")
+    p.set_defaults(func=cmd_level)
 
     p = sub.add_parser("check", help="measure a finished video: motion per scene, frozen stretches, jumps, blank frames, sound")
     p.add_argument("video")

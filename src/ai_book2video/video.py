@@ -141,11 +141,40 @@ def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path, encoder
         raise Book2VideoError(f"ffmpeg failed on {out.name}: {result.stderr.strip()[-400:]}")
 
 
+def level_loudness(source: Path, out: Path, loudness: float = LOUDNESS) -> dict:
+    """Bring `source`'s sound to `loudness` LUFS and write the result to `out`. Two-pass loudnorm,
+    measured over the whole file first, so phones play it as loud as other videos: a plain gain when
+    the peaks allow, otherwise loudnorm gently limits the loudest peaks to keep 1.5 dB of headroom.
+    The picture is copied, not re-encoded, and `out` may equal `source` (a temp file is used)."""
+    target = f"I={loudness}:TP=-1.5:LRA=11"
+    measure = subprocess.run(
+        [require_ffmpeg(), "-hide_banner", "-nostats", "-i", str(source), "-vn", "-af", f"loudnorm={target}:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", measure.stderr)
+    if measure.returncode != 0 or not found:
+        raise Book2VideoError(f"measuring loudness failed: {measure.stderr.strip()[-400:]}")
+    m = json.loads(found.group(0))
+    apply = (f"loudnorm={target}:linear=true:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+             f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}")
+    dest = out
+    if out.resolve() == source.resolve():
+        dest = out.with_suffix(".leveled" + out.suffix)
+    result = subprocess.run(
+        [require_ffmpeg(), "-y", "-loglevel", "error", "-i", str(source), "-c:v", "copy", "-af", apply, "-ar", "48000",
+         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(dest)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise Book2VideoError(f"loudness step failed: {result.stderr.strip()[-400:]}")
+    if dest != out:
+        dest.replace(out)
+    return {"target_lufs": loudness, "measured_lufs": float(m["input_i"]), "measured_peak": float(m["input_tp"])}
+
+
 def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | None = LOUDNESS) -> dict | None:
-    """Join the scene clips in order. With `loudness` (LUFS), bring the sound to that level, measured
-    over the whole film first (two-pass loudnorm), so phones play it as loud as other videos. It is a
-    plain gain when the peaks allow; otherwise loudnorm gently limits the loudest peaks to keep 1.5 dB
-    of headroom. The picture is copied, not re-encoded."""
+    """Join the scene clips in order. With `loudness` (LUFS), bring the sound to that level (see
+    `level_loudness`). The picture is copied, not re-encoded."""
     listing = workdir / "clips.txt"
     listing.write_text("".join(f"file '{clip.resolve()}'\n" for clip in clips), encoding="utf-8")
     joined = out if loudness is None else workdir / "joined.mp4"
@@ -158,26 +187,7 @@ def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | No
         raise Book2VideoError(f"joining clips failed: {result.stderr.strip()[-400:]}")
     if loudness is None:
         return None
-    target = f"I={loudness}:TP=-1.5:LRA=11"
-    measure = subprocess.run(
-        [require_ffmpeg(), "-hide_banner", "-nostats", "-i", str(joined), "-vn", "-af", f"loudnorm={target}:print_format=json", "-f", "null", "-"],
-        capture_output=True, text=True,
-    )
-    found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", measure.stderr)
-    if measure.returncode != 0 or not found:
-        raise Book2VideoError(f"measuring loudness failed: {measure.stderr.strip()[-400:]}")
-    m = json.loads(found.group(0))
-    apply = (f"loudnorm={target}:linear=true:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
-             f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}")
-    result = subprocess.run(
-        [require_ffmpeg(), "-y", "-loglevel", "error", "-i", str(joined), "-c:v", "copy", "-af", apply, "-ar", "48000",
-         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out)],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise Book2VideoError(f"loudness step failed: {result.stderr.strip()[-400:]}")
-    joined.unlink(missing_ok=True)
-    return {"target_lufs": loudness, "measured_lufs": float(m["input_i"]), "measured_peak": float(m["input_tp"])}
+    return level_loudness(joined, out, loudness)
 
 
 def build(
