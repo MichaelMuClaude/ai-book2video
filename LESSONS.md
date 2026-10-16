@@ -90,6 +90,18 @@ not a fixed loop.**
   70 characters of script-reading cost and were confirmed against real Kokoro audio; the bolded word
   visibly tracks the narration in a cropped-frame check.
 
+**20. Background music: render a loop that wraps, keep it 14 dB under, duck it under the voice.**
+- Evidence: a 16-bar loop renders in about 3 s in plain Python; notes that ring past the end are
+  added back at the start, so the loop tiles with nothing but a note attack at the seam. In an
+  88 s demo the pauses between sentences rose from -83 dB (silence) to about -30 dB, the level
+  during speech changed by under 0.1 dB, and Whisper still matched 97.5% of the script's words.
+- From anything2video's audio engine (MIT): one mood per kind of film, the bed well under the voice.
+
+**21. Place a sound by its sync point, not its first sample.** A hit is heard on its transient, so
+put it one frame early; a whoosh is heard at its peak, so centre it on the moment the movement
+crosses the frame.
+- From anything2video's audio engine (MIT).
+
 ## Process
 
 **11. Render a sample before the full chapter.** Two or three scenes: the hook, the busiest scene,

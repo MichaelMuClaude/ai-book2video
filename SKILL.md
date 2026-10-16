@@ -20,7 +20,7 @@ ai-book2video section book.json s03 --max-words 1200   # read a section (use --p
 ai-book2video validate chapter.script.json             # check the script and the sentence pairs
 ai-book2video preview chapter.script.json -o preview   # three frames per scene
 ai-book2video build chapter.script.json -o sample.mp4 --scenes 1,14,30 --sfx  # a short sample first
-ai-book2video build chapter.script.json -o chapter.mp4 --sfx                   # the full render (Kokoro voice by default)
+ai-book2video build chapter.script.json -o chapter.mp4 --sfx --music reflective  # the full render (Kokoro voice by default)
 ai-book2video check chapter.mp4                        # measure the finished film: motion, frozen stretches, jumps, sound
 ai-book2video analyze-ref reference.mp4                # measure a reference video or picture to copy its style
 ```
@@ -94,6 +94,12 @@ When the user shows a video or picture whose style they like:
 2. Read `reference.md` and look at the contact sheet. Decide what to take: colours (paste and adjust the palettes), backgrounds and props that match its world, pacing (long shots mean longer, calmer sentences and fewer actions; fast cuts mean short sentences and an action on most of them), and how busy each scene should be.
 3. Say plainly what can and cannot be matched. The stage draws stick figures in SVG; a reference with photos, 3D or hand-painted art can lend its colours, pacing and energy, not its drawing.
 4. Render one sample scene and put a frame of it next to the contact sheet before writing the rest.
+
+## Background music
+
+`--music calm|reflective|tense` (or `"music"` at the top of the script) lays a bed made in code under the whole film: a pad, a soft bass and a plucked arpeggio on a four-chord progression, rendered once as a seamless loop of about a minute. It sits 14 dB under the film's loudness (`--music-level`) and drops about 8 dB more whenever the narrator speaks, so it fills pauses without competing. Pick the mood from the chapter: `calm` for gentle or warm stories, `reflective` for history and thought, `tense` for conflict and danger. Off by default.
+
+With music on, `check` can no longer tell a silent scene from a quiet one, because the bed fills the gaps; check a build without music if a scene might have lost its narration.
 
 ## Sound effects
 

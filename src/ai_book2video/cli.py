@@ -112,6 +112,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         effects=args.sfx,
         camera=args.camera,
         loudness=None if args.loudness == 0 else args.loudness,
+        music_mood=None if args.music in (None, "none") else args.music,
+        music_level=args.music_level,
         effects_volume=args.sfx_volume,
     )
     minutes, seconds = divmod(manifest["seconds"], 60)
@@ -214,6 +216,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--camera", choices=("classic", "director"),
                    help="camera style for every stage scene (overrides the script's \"camera\"): classic moves to the next "
                         "framing on every sentence; director picks the move for what each sentence shows")
+    p.add_argument("--music", choices=("calm", "reflective", "tense", "none"),
+                   help="background music made in code, quietly under the narration and ducked while it speaks "
+                        "(overrides the script's \"music\"; none turns it off)")
+    p.add_argument("--music-level", type=float, default=video.MUSIC_LEVEL,
+                   help=f"music level in dB relative to the film's loudness (default {video.MUSIC_LEVEL})")
     p.add_argument("--loudness", type=float, default=video.LOUDNESS,
                    help=f"bring the finished film to this loudness in LUFS (default {video.LOUDNESS}; 0 leaves it as it is)")
     p.add_argument("--sfx", action="store_true",

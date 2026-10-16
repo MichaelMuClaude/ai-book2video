@@ -79,6 +79,7 @@ class Script:
     chapter: str = ""
     palettes: list[dict] = field(default_factory=list)
     camera: str = "director"
+    music: str = ""
 
     @property
     def seconds_estimate(self) -> float:
@@ -112,6 +113,8 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
         errors.append("missing top-level 'title'")
     if raw.get("camera", "director") not in ("classic", "director"):
         errors.append("top-level 'camera' must be classic or director")
+    if raw.get("music") not in (None, "", "none", "calm", "reflective", "tense"):
+        errors.append("top-level 'music' must be calm, reflective, tense or none")
     palettes = raw.get("palettes")
     if palettes is not None:
         if not isinstance(palettes, list) or not palettes:
@@ -263,4 +266,5 @@ def load(path: Path) -> Script:
         chapter=str(raw.get("chapter", "")).strip(),
         palettes=[dict(palette) for palette in raw.get("palettes") or []],
         camera=str(raw.get("camera", "director")),
+        music="" if raw.get("music") in (None, "none") else str(raw.get("music")),
     )

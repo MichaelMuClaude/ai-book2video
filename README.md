@@ -12,6 +12,7 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **A mouth driven by the real narration**: a `"talk"` actor's mouth opens with the synthesised voice's actual loudness, not a fixed flap.
 - **A director camera** (default): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move. `"camera": "classic"` brings back the original cut-every-sentence style.
 - **Checked with numbers** (`check`): motion per scene, frozen stretches, jumps, blank frames, silent scenes and loudness, before anyone watches. The finished film is levelled to -16 LUFS.
+- **Background music made in code** (`--music calm|reflective|tense`): a pad, bass and plucked arpeggio on a four-chord progression, looped seamlessly under the film, kept well below the voice and ducked further whenever the narrator speaks.
 - **Sound effects made in code** (`--sfx`): bangs, thuds, train whistles and chugs, footsteps, ticking clocks, pops and whooshes, synthesised from tones and noise and timed to the action. No sound files to download or license.
 - **Learn a style from a reference** (`analyze-ref`): measure a video or picture you like (cuts, shot lengths, colours, motion), get a contact sheet and starter colour palettes, and give the book its own look with a `palettes` list.
 
@@ -139,6 +140,7 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 - `src/ai_book2video/speech.py`, `tts_kokoro.py`: narration with Kokoro, espeak-ng or a custom command
 - `src/ai_book2video/subtitles.py`: sentence splitting, bilingual cues and SRT
 - `src/ai_book2video/sfx.py`: sound effects synthesised in code and placed on the action
+- `src/ai_book2video/music.py`: background music synthesised in code as a seamless loop
 - `src/ai_book2video/check.py`: measures a finished film (motion per scene, frozen stretches, jumps, blank frames, sound)
 - `src/ai_book2video/reference.py`: reference analysis (cuts, shot lengths, colours, motion, contact sheet)
 - `src/ai_book2video/video.py`: clips per scene, rendered in parallel and joined into the final MP4
@@ -151,6 +153,7 @@ We learn from other people's good work and say so. No code was copied; the ideas
 
 - [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video; make sound effects in code instead of fetching sound files; study a liked video shot by shot.
 - [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) by 花叔 (MIT): the camera rules behind the director camera (hold when the picture moves, fast moves only for accents, every push answered); cues that name a word instead of a second; measuring the finished film before delivery and failing slide-like scenes; independent review that checks facts as well as pictures; and keeping a lessons file with evidence.
+- [anything2video](https://github.com/2021291696/anything2video) (MIT), whose audio engine comes from [mg-styles-15](https://github.com/Vincentwei1021/mg-styles-15): background music made in code with a mood per style, kept under the voice and ducked; sound placed by its sync point (a hit one frame early so it reads on the frame, a whoosh peaking as the movement crosses); and careful credit for every borrowed piece.
 - [Remotion](https://github.com/remotion-dev/remotion) (its own licence, not used as a dependency — see `LESSONS.md`): the idea of driving a mouth or a visual from the real amplitude of the rendered audio instead of a fixed loop, and of highlighting the word a caption is currently saying from word-level timing.
 
 ## Licence

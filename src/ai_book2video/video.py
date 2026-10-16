@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_book2video import motion, sfx, speech, subtitles
+from ai_book2video import motion, music, sfx, speech, subtitles
 from ai_book2video.browser import find_chrome, find_node
 from ai_book2video.errors import Book2VideoError
 from ai_book2video.script import Script, Scene
@@ -22,7 +22,9 @@ FPS = 30
 MIN_SCENE_SECONDS = 4.0
 TAIL_SECONDS = 0.8
 LOUDNESS = -16.0  # LUFS for the finished film: about what phone video apps play at
-SFX_VOLUME = 1.0  # multiplies the built-in sound effect levels (sfx.LEVELS)
+SFX_VOLUME = 1.0
+MUSIC_LEVEL = -14.0  # dB of the music bed relative to the film's loudness (before ducking)
+MUSIC_DUCK = 8.0  # dB the bed drops while the narrator speaks  # multiplies the built-in sound effect levels (sfx.LEVELS)
 DEFAULT_JOBS = max(1, min(4, (os.cpu_count() or 4) // 8))  # scenes rendered at the same time; kept low so the CPU stays cool
 
 
@@ -179,9 +181,47 @@ def level_loudness(source: Path, out: Path, loudness: float = LOUDNESS) -> dict:
     return {"target_lufs": loudness, "measured_lufs": float(m["input_i"]), "measured_peak": float(m["input_tp"])}
 
 
-def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | None = LOUDNESS) -> dict | None:
-    """Join the scene clips in order. With `loudness` (LUFS), bring the sound to that level (see
-    `level_loudness`). The picture is copied, not re-encoded."""
+def _integrated_lufs(path: Path) -> float:
+    result = subprocess.run([require_ffmpeg(), "-hide_banner", "-nostats", "-i", str(path), "-vn", "-af", "ebur128", "-f", "null", "-"],
+                            capture_output=True, text=True)
+    found = re.findall(r"I:\s+(-?[0-9.]+) LUFS", result.stderr)
+    if not found:
+        raise Book2VideoError(f"measuring loudness of {path.name} failed: {result.stderr.strip()[-300:]}")
+    return float(found[-1])
+
+
+def add_music(film: Path, loop: Path, out: Path, level: float = MUSIC_LEVEL, duck: float = MUSIC_DUCK) -> dict:
+    """Lay a seamless music loop under the whole film: `level` dB relative to the film's own loudness,
+    faded in over 2 s and out over 4 s, and lowered by up to about `duck` dB whenever the narration
+    is speaking (sidechain compression keyed by the film's own sound). The picture is copied."""
+    seconds = speech.duration(film)
+    film_lufs = _integrated_lufs(film)
+    loop_lufs = _integrated_lufs(loop)
+    gain = film_lufs + level - loop_lufs
+    ratio = max(1.5, 10 ** (duck / 20) * 1.5)
+    graph = (
+        f"[1:a]aformat=sample_rates=48000:channel_layouts=mono,atrim=0:{seconds:.3f},asetpts=N/SR/TB,volume={gain:.2f}dB,"
+        f"afade=t=in:st=0:d=2,afade=t=out:st={max(0.0, seconds - 4):.3f}:d=4[m];"
+        "[0:a]aformat=sample_rates=48000:channel_layouts=mono,asplit=2[v][key];"
+        f"[m][key]sidechaincompress=threshold=0.02:ratio={ratio:.1f}:attack=40:release=600[md];"
+        "[v][md]amix=inputs=2:duration=first:normalize=0[a]"
+    )
+    result = subprocess.run(
+        [require_ffmpeg(), "-y", "-loglevel", "error", "-i", str(film), "-stream_loop", "-1", "-i", str(loop),
+         "-filter_complex", graph, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+         "-t", f"{seconds:.3f}", "-movflags", "+faststart", str(out)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise Book2VideoError(f"adding music failed: {result.stderr.strip()[-400:]}")
+    return {"film_lufs": film_lufs, "music_gain_db": round(gain, 2), "level_db": level, "duck_db": duck}
+
+
+def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | None = LOUDNESS,
+               music_loop: Path | None = None, music_level: float | None = None) -> dict | None:
+    """Join the scene clips in order. With `music_loop`, lay it under the film (see `add_music`).
+    With `loudness` (LUFS), bring the sound to that level (see `level_loudness`). The picture is
+    copied, not re-encoded."""
     listing = workdir / "clips.txt"
     listing.write_text("".join(f"file '{clip.resolve()}'\n" for clip in clips), encoding="utf-8")
     joined = out if loudness is None else workdir / "joined.mp4"
@@ -192,9 +232,19 @@ def join_clips(clips: list[Path], out: Path, workdir: Path, loudness: float | No
     )
     if result.returncode != 0:
         raise Book2VideoError(f"joining clips failed: {result.stderr.strip()[-400:]}")
+    info: dict = {}
+    if music_loop is not None:
+        scored = workdir / "with-music.mp4"
+        target = scored if loudness is not None else out
+        if loudness is None and joined == out:
+            joined = out.with_suffix(".nomusic" + out.suffix)
+            out.replace(joined)
+        info["music"] = add_music(joined, music_loop, target, MUSIC_LEVEL if music_level is None else music_level)
+        joined = scored if loudness is not None else out
     if loudness is None:
-        return None
-    return level_loudness(joined, out, loudness)
+        return info or None
+    info.update(level_loudness(joined, out, loudness))
+    return info
 
 
 def build(
@@ -214,6 +264,8 @@ def build(
     effects_volume: float = SFX_VOLUME,
     camera: str | None = None,
     loudness: float | None = LOUDNESS,
+    music_mood: str | None = None,
+    music_level: float = MUSIC_LEVEL,
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
@@ -282,7 +334,9 @@ def build(
         for future in [pool.submit(render, job) for job in jobs_list]:
             future.result()
     out.parent.mkdir(parents=True, exist_ok=True)
-    levels = join_clips(clip_paths, out, workdir, loudness)
+    mood = music_mood or script.music or None
+    loop = music.render_loop(mood, workdir / f"music-{mood}.wav") if mood else None
+    levels = join_clips(clip_paths, out, workdir, loudness, loop, music_level)
     srt = out.with_suffix(".srt")
     if subtitles_file:
         subtitles.write_srt(cues, srt)
@@ -299,6 +353,7 @@ def build(
         "sound_effects": effects,
         "camera": camera or script.camera,
         "loudness": levels,
+        "music": mood,
         "scenes": [timing.__dict__ for timing in timings],
     }
     (workdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

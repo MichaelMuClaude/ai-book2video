@@ -24,6 +24,8 @@ RATE = 24000
 STEP_EVERY = 0.55  # matches the walking leg swing (1.1 s per stride, two steps)
 
 KINDS = ("impact", "chime", "sad", "question", "pop", "none")
+LEAD = 1 / 30  # one video frame
+WHOOSH_SECONDS = 0.55
 
 
 # --- synthesis -------------------------------------------------------------------------------
@@ -108,7 +110,7 @@ def question(seed: int = 0) -> list[float]:
     return _tone(520, 520, 0.09, 20, 0.35) + [0.0] * _n(0.05) + _tone(700, 940, 0.16, 12, 0.35)
 
 
-def whoosh(seed: int = 0, seconds: float = 0.55) -> list[float]:
+def whoosh(seed: int = 0, seconds: float = WHOOSH_SECONDS) -> list[float]:
     centre = lambda p: 500 + 2500 * math.sin(math.pi * p)  # noqa: E731
     return _noise(seconds, 1.6, lambda p: centre(p) * 0.6, centre, lambda p: math.sin(math.pi * p) ** 2, seed)
 
@@ -163,7 +165,9 @@ def scene_events(scene: Scene, cues: list, duration: float, last: bool = False) 
     """(time, sound, options) for everything in a scene that should make a noise."""
     events: list[tuple[float, str, dict]] = []
     if not last:
-        events.append((max(0.0, duration - 0.75), "whoosh", {}))  # the wipe into the next scene
+        # The wipe into the next scene crosses the middle of the frame about 0.4 s before the end;
+        # a whoosh peaks halfway through itself, so start it half its length before that.
+        events.append((max(0.0, duration - 0.4 - WHOOSH_SECONDS / 2), "whoosh", {}))
     if scene.kind == "title":
         events.append((0.4, "chime", {}))
     if scene.kind != "stage" or not scene.stage:
@@ -215,6 +219,10 @@ def scene_events(scene: Scene, cues: list, duration: float, last: bool = False) 
                 t += STEP_EVERY
         for line in item.get("say", []):
             events.append((when(line.get("at"), cues, 0.5), "pop", {"gain": 0.6}))
+    # A hit's transient is its first instant, and a sound placed on the hit frame is heard as late;
+    # one frame early it reads on the frame (a habit from anything2video's audio engine).
+    early = {"impact", "thud", "pop", "chime", "sad", "question", "tick", "step", "chug"}
+    events = [(max(0.0, t - LEAD) if name in early else t, name, opts) for t, name, opts in events]
     return sorted((round(t, 3), name, opts) for t, name, opts in events if t < duration)
 
 

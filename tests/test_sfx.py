@@ -37,13 +37,15 @@ class EventTests(unittest.TestCase):
         })
         events = sfx.scene_events(scene, CUES, 6.0)
         names = [name for _, name, _ in events]
-        self.assertIn((2.0, "impact", {}), events)
-        self.assertIn((2.4, "thud", {}), [(t, n, o) for t, n, o in events if n == "thud"])
+        lead = round(2.0 - sfx.LEAD, 3)  # hits sound one frame early so they read on the hit frame
+        self.assertIn((lead, "impact", {}), events)
+        self.assertIn((round(2.4 - sfx.LEAD, 3), "thud", {}), [(t, n, o) for t, n, o in events if n == "thud"])
         self.assertIn("whistle", names)
         self.assertGreater(names.count("chug"), 4)
         self.assertGreater(names.count("step"), 2)
-        self.assertIn((4.5, "pop", {"gain": 0.6}), events)
-        self.assertIn("whoosh", names)
+        self.assertIn((round(4.5 - sfx.LEAD, 3), "pop", {"gain": 0.6}), events)
+        whoosh = [t for t, n, _ in events if n == "whoosh"][0]
+        self.assertAlmostEqual(whoosh + sfx.WHOOSH_SECONDS / 2, 6.0 - 0.4, places=3)  # peaks as the wipe crosses
 
     def test_last_scene_has_no_wipe_and_none_silences(self):
         scene = stage_scene({"props": [{"type": "burst", "x": 500, "y": 500, "at": 1, "text": "BANG!", "sfx": "none"}]})
