@@ -319,7 +319,10 @@ def _mouths(gid: str, talking: bool) -> str:
     }
     parts = [f'<g data-id="{gid}-m-{name}">{shape}</g>' for name, shape in shapes.items()]
     if talking:
-        parts.append(f'<g data-id="{gid}-m-talk" data-flap="0.34"><ellipse cx="0" cy="-297" rx="11" ry="9" fill="{INK}"/></g>')
+        # data-voice drives mouth openness from the narration's real loudness when it was computed
+        # (speech.amplitude_envelope); data-flap is the old fixed-period fallback, used only when
+        # there is no audio yet (e.g. a layout preview).
+        parts.append(f'<g data-id="{gid}-m-talk" data-voice="1" data-flap="0.34"><ellipse cx="0" cy="-297" rx="11" ry="9" fill="{INK}"/></g>')
     return "".join(parts)
 
 

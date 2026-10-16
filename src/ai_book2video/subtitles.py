@@ -19,6 +19,9 @@ class Cue:
     text: str
     zh: str = ""
     words: list = field(default_factory=list)  # [[word, seconds], ...]: when each word starts
+    captions: list = field(default_factory=list)  # [[token, seconds_or_None], ...]: one entry per
+    # displayed word (cue.text.split()), original spelling and punctuation kept, for a karaoke-style
+    # caption highlight. None where a token could not be timed.
 
 
 def norm(text: str) -> str:
@@ -92,9 +95,10 @@ def estimate_words(cue: Cue) -> None:
     tokens = [t for t in cue.text.split() if norm(t)]
     total = sum(len(t) + 1 for t in tokens) or 1
     cursor, span = cue.start, cue.end - cue.start
-    cue.words = []
+    cue.words, cue.captions = [], []
     for token in tokens:
         cue.words.append([norm(token), round(cursor, 3)])
+        cue.captions.append([token, round(cursor, 3)])
         cursor += span * (len(token) + 1) / total
 
 
@@ -123,6 +127,20 @@ def align(sentence_list: list[str], spoken: list) -> list[list]:
     return [[[key, start, end] for a, b, key, start, end in placed if a >= lo and b <= hi] for lo, hi in bounds]
 
 
+def display_words(tokens: list[str], spoken: list, cue_start: float, cue_end: float) -> list[list]:
+    """One timing per displayed token (e.g. cue.text.split()), original spelling kept. A token made
+    of several spoken words ("ten-year-old") takes the first one's start. An unmatched token is
+    placed by even spacing between its timed neighbours, anchored to cue_start/cue_end."""
+    grouped = align(tokens, spoken)
+    raw = [group[0][1] if group else None for group in grouped]
+    raw[0] = cue_start if raw[0] is None else raw[0]
+    for i in range(1, len(raw)):
+        if raw[i] is None:
+            later = next((t for t in raw[i + 1:] if t is not None), cue_end)
+            raw[i] = raw[i - 1] + (later - raw[i - 1]) / 2
+    return [[token, round(t, 3)] for token, t in zip(tokens, raw)]
+
+
 def timed_cues(english: list[str], chinese: list[str], spoken: list, start: float, end: float) -> list[Cue]:
     """One cue per sentence pair, timed from the speech engine's word timings.
 
@@ -146,6 +164,8 @@ def timed_cues(english: list[str], chinese: list[str], spoken: list, start: floa
         cue.words = [[key, round(t0, 3)] for key, t0, _ in found[index]]
         if not cue.words:
             estimate_words(cue)
+        else:
+            cue.captions = display_words(sentence.split(), found[index], cue.start, cue.end)
         cues.append(cue)
     return cues
 

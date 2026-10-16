@@ -8,7 +8,8 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **Actions land on the words**: an action can be timed to a narration sentence (`"at": "s2"`), so the car hits exactly when the narrator says it does.
 - **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
 - **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
-- **Timed to the voice**: subtitles start when each sentence is actually spoken, from Kokoro's word timings, and actions can land on a word (`"at": "w:knife"`).
+- **Timed to the voice**: subtitles start when each sentence is actually spoken, from Kokoro's word timings, and actions can land on a word (`"at": "w:knife"`). The English caption highlights the word being said as it is said.
+- **A mouth driven by the real narration**: a `"talk"` actor's mouth opens with the synthesised voice's actual loudness, not a fixed flap.
 - **A director camera** (default): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move. `"camera": "classic"` brings back the original cut-every-sentence style.
 - **Checked with numbers** (`check`): motion per scene, frozen stretches, jumps, blank frames, silent scenes and loudness, before anyone watches. The finished film is levelled to -16 LUFS.
 - **Sound effects made in code** (`--sfx`): bangs, thuds, train whistles and chugs, footsteps, ticking clocks, pops and whooshes, synthesised from tones and noise and timed to the action. No sound files to download or license.
@@ -150,6 +151,7 @@ We learn from other people's good work and say so. No code was copied; the ideas
 
 - [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video; make sound effects in code instead of fetching sound files; study a liked video shot by shot.
 - [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) by 花叔 (MIT): the camera rules behind the director camera (hold when the picture moves, fast moves only for accents, every push answered); cues that name a word instead of a second; measuring the finished film before delivery and failing slide-like scenes; independent review that checks facts as well as pictures; and keeping a lessons file with evidence.
+- [Remotion](https://github.com/remotion-dev/remotion) (its own licence, not used as a dependency — see `LESSONS.md`): the idea of driving a mouth or a visual from the real amplitude of the rendered audio instead of a fixed loop, and of highlighting the word a caption is currently saying from word-level timing.
 
 ## Licence
 

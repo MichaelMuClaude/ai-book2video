@@ -68,6 +68,43 @@ class MotionPageTests(unittest.TestCase):
             result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+class VoiceAndCaptionTests(unittest.TestCase):
+    def stage_scene(self, actors, narration="He grabs the knife."):
+        raw = {"kind": "stage", "narration": narration, "narration_zh": "他拿起刀。", "stage": {"actors": actors}}
+        return scene_from(raw)
+
+    def test_voice_envelope_is_embedded_and_used_by_talk_mouths(self):
+        scene, title = self.stage_scene([{"label": "A", "x": 500, "action": "talk"}])
+        page = motion.scene_page(scene, 1, title, 6.0, voice=[0.1, 0.9, 0.3], voice_rate=24)
+        self.assertIn("const VOICE = [0.1, 0.9, 0.3]", page)
+        self.assertIn("const VOICE_RATE = 24", page)
+        self.assertIn('data-voice="1"', page)
+
+    def test_no_voice_means_empty_array_and_old_flap_still_present(self):
+        scene, title = self.stage_scene([{"label": "A", "x": 500, "action": "talk"}])
+        page = motion.scene_page(scene, 1, title, 6.0)
+        self.assertIn("const VOICE = []", page)
+        self.assertIn('data-flap="0.34"', page)  # the fallback path still exists in the markup
+
+    def test_cue_words_become_caption_spans(self):
+        scene, title = self.stage_scene([{"label": "A", "x": 500, "action": "stand"}])
+        cues = [[0.0, 1.5, "He grabs the knife.", "他拿起刀。", [], [["He", 0.0], ["grabs", 0.3], ["the", 0.6], ["knife.", 0.8]]]]
+        page = motion.scene_page(scene, 1, title, 6.0, cues)
+        self.assertIn("const CUES", page)
+        self.assertIn("knife.", page)  # the token with real timing made it into the embedded cue
+        self.assertIn("words.map", page)  # the span-building code is present
+
+    @unittest.skipUnless(shutil.which("node"), "node is needed to check the engine script")
+    def test_engine_script_still_parses_with_voice_data(self):
+        scene, title = self.stage_scene([{"label": "A", "x": 500, "action": "talk"}])
+        page = motion.scene_page(scene, 1, title, 6.0, voice=[0.0, 0.5, 1.0, 0.2])
+        code = re.search(r"<script>(.*)</script>", page, re.S).group(1)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "engine.js"
+            path.write_text(code, encoding="utf-8")
+            result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

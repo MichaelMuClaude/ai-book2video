@@ -36,6 +36,15 @@ PALETTES = [
 ]
 
 ENGINE = r"""
+function voiceAt(t) {
+  // Linear interpolation between amplitude samples taken VOICE_RATE times a second.
+  if (!VOICE.length) return 0;
+  const pos = t * VOICE_RATE;
+  const i = Math.max(0, Math.min(VOICE.length - 1, Math.floor(pos)));
+  const j = Math.min(VOICE.length - 1, i + 1);
+  const frac = pos - i;
+  return VOICE[i] + (VOICE[j] - VOICE[i]) * frac;
+}
 const EASE = {
   linear: (t) => t,
   out: (t) => 1 - Math.pow(1 - t, 3),
@@ -72,8 +81,14 @@ function apply(t) {
     const bl = el.dataset.blink;
     if (bl) { const [period, phase] = bl.split(',').map(Number); if (((t + phase) % period) < 0.13) sy *= 0.12; }
     let op = st.o;
-    const fp = el.dataset.flap;
-    if (fp) { const period = Number(fp); if ((t % period) >= period / 2) op = 0; }
+    if (el.dataset.voice && VOICE.length) {
+      const v = voiceAt(t);
+      op = Math.min(1, v * 1.7);
+      sy *= 0.55 + 0.55 * v;
+    } else {
+      const fp = el.dataset.flap;
+      if (fp) { const period = Number(fp); if ((t % period) >= period / 2) op = 0; }
+    }
     el.style.transform = `translate(${st.x}px, ${y}px) rotate(${rot}deg) scale(${st.s}) scaleX(${st.sx}) scaleY(${sy})`;
     el.style.opacity = String(Math.max(0, Math.min(1, op)));
   }
@@ -91,6 +106,7 @@ function apply(t) {
     }
   }
 }
+let capWords = null;  // the [[token, start], ...] currently built into #cap-en's spans
 function captions(t) {
   const box = document.getElementById('caption');
   if (!box) return;
@@ -101,9 +117,28 @@ function captions(t) {
   const op = cur ? Math.min(1, (t - cur[0]) / 0.2, (cur[1] - t) / 0.2) : 0;
   const enText = cur ? cur[2] : '';
   const zhText = cur ? cur[3] : '';
-  if (en.textContent !== enText) {
-    en.textContent = enText;
+  const words = cur ? cur[5] : null;
+  if (en.dataset.text !== enText) {
+    en.dataset.text = enText;
     en.style.fontSize = enText.length > 150 ? '38px' : enText.length > 95 ? '44px' : '50px';
+    if (words && words.length) {
+      const esc = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      en.innerHTML = words.map((w, i) => `<span data-w="${i}">${esc(w[0])}</span>`).join(' ');
+      capWords = words;
+    } else {
+      en.textContent = enText;
+      capWords = null;
+    }
+  }
+  if (capWords) {
+    // The word whose start has passed, up to the next one's: a karaoke-style highlight, no reflow.
+    let active = -1;
+    for (let i = 0; i < capWords.length; i++) if (t >= capWords[i][1]) active = i;
+    for (const span of en.children) {
+      const on = Number(span.dataset.w) === active;
+      span.style.opacity = on ? '1' : '0.62';
+      span.style.textShadow = on ? '0 0 0 currentColor, 0 2px 0 rgba(0,0,0,0.35)' : 'none';
+    }
   }
   if (zh.textContent !== zhText) {
     zh.textContent = zhText;
@@ -212,7 +247,8 @@ def _header(book: str, chapter: str, palette: dict) -> str:
             f'{badge}{name}</div>')
 
 
-def _wrapper_page(palette: dict, body: str, timeline: Timeline, duration: float, title: str, cues=None, book: str = "", chapter: str = "") -> str:
+def _wrapper_page(palette: dict, body: str, timeline: Timeline, duration: float, title: str, cues=None, book: str = "", chapter: str = "",
+                   voice: list[float] | None = None, voice_rate: int = 24) -> str:
     css = CSS % {"w": WIDTH, "h": HEIGHT, "bg": palette["bg"], "pad": PAD, "cap": CAPTION_TOP}
     body = _header(book, chapter, palette) + body
     anims = json.dumps(timeline.sorted_anims())
@@ -226,7 +262,8 @@ def _wrapper_page(palette: dict, body: str, timeline: Timeline, duration: float,
         f"<title>{_esc(title)}</title><style>{css}</style></head><body>"
         f"<div id='stage'>{body}{caption}{start}{end}</div>"
         f"<script>const ANIMS = {anims}; const INIT = {init}; const DURATION = {duration:.3f}; "
-        f"const CUES = {json.dumps(cues or [], ensure_ascii=False)};\n{ENGINE}</script>"
+        f"const CUES = {json.dumps(cues or [], ensure_ascii=False)};\n"
+        f"const VOICE = {json.dumps(voice or [])};\nconst VOICE_RATE = {voice_rate};\n{ENGINE}</script>"
         "</body></html>"
     )
 
@@ -550,7 +587,8 @@ def _pick(scene: Scene, index: int, palettes: list[dict] | None = None) -> dict:
 
 
 def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list | None = None, book: str = "", chapter: str = "",
-               palettes: list[dict] | None = None, camera: str = "director") -> str:
+               palettes: list[dict] | None = None, camera: str = "director", voice: list[float] | None = None,
+               voice_rate: int = 24) -> str:
     """Full HTML page for one scene. `cues` is a list of [start, end, english, chinese] in scene seconds.
     `palettes` replaces the built-in colour sets (scenes take them in turn)."""
     palette = _pick(scene, index, palettes)
@@ -558,4 +596,4 @@ def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list
         body, timeline = _stage(scene, duration, palette, cues, camera)
     else:
         body, timeline = TEMPLATES[scene.kind](scene, duration, palette)
-    return _wrapper_page(palette, body, timeline, duration, title, cues=cues, book=book, chapter=chapter)
+    return _wrapper_page(palette, body, timeline, duration, title, cues=cues, book=book, chapter=chapter, voice=voice, voice_rate=voice_rate)

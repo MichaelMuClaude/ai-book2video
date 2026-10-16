@@ -34,6 +34,12 @@ class SceneTiming:
     start: float
 
 
+def has_talker(scene: Scene) -> bool:
+    """True when a "talk" actor is on stage, so it is worth reading a voice envelope for the mouth."""
+    stage = scene.stage if isinstance(scene.stage, dict) else {}
+    return any(isinstance(a, dict) and a.get("action") == "talk" for a in stage.get("actors", []))
+
+
 def scene_cues(scene: Scene, start: float, end: float, spoken: list | None = None) -> list[subtitles.Cue]:
     """Subtitles for one scene: English narration with its Chinese pair when given.
     With `spoken` word timings (from Kokoro) each sentence starts exactly when it is said;
@@ -61,8 +67,9 @@ def spoken_words(wav: Path) -> list:
 
 
 def cue_rows(cues: list[subtitles.Cue]) -> list[list]:
-    """[start, end, english, chinese, words] per cue; words are [[word, start], ...] for "w:" cues."""
-    return [[round(c.start, 3), round(c.end, 3), c.text, c.zh, c.words] for c in cues]
+    """[start, end, english, chinese, words, captions] per cue. `words` are [[word, start], ...] for
+    "w:" cues; `captions` are [[token, start], ...], one per displayed word, for the caption highlight."""
+    return [[round(c.start, 3), round(c.end, 3), c.text, c.zh, c.words, c.captions] for c in cues]
 
 
 def require_ffmpeg() -> str:
@@ -241,9 +248,10 @@ def build(
         seconds = max(MIN_SCENE_SECONDS, spoken + TAIL_SECONDS)
         page = pages_dir / f"scene{scene.index:03d}.html"
         local_cues = scene_cues(scene, 0.0, spoken, spoken_words(wav))
+        voice_env = speech.amplitude_envelope(wav) if has_talker(scene) else None
         page.write_text(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter,
-                              script.palettes, camera or script.camera),
+                              script.palettes, camera or script.camera, voice_env, speech.ENVELOPE_RATE),
             encoding="utf-8",
         )
         clip = clips_dir / f"scene{scene.index:03d}.mp4"

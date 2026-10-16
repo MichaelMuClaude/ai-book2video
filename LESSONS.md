@@ -8,6 +8,18 @@ The habit of keeping this file, and several entries below, come from
 [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) by 花叔 (MIT) and
 [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰.
 
+**On Remotion.** It was considered as the rendering engine (it is, under the hood, the same thing
+we built by hand: React components rendered deterministically from a frame number through headless
+Chrome, then encoded with ffmpeg). Decided against adopting it:
+- its own render model (`useCurrentFrame`/`interpolate` instead of CSS transitions) is the same
+  "state is a pure function of time" rule our `Timeline.apply(t)` already follows; switching would
+  not fix anything broken, only rewrite a tested engine in a different syntax.
+- it is source-available, not OSI open source. The free tier covers individuals, for-profit
+  organisations of up to 3 people, non-profits and evaluation; anyone outside that needs a paid
+  Company License. Making it a dependency of an MIT project would mean every downstream user has to
+  separately qualify for Remotion's own terms, which this project does not ask of anyone today.
+- two of its ideas were worth taking on their own, without the dependency: see entries 18 and 19.
+
 ## Timing
 
 **1. Time actions to words, not to guessed seconds.** Write `"at": "w:knife"` (or `"s2"` for a
@@ -62,6 +74,21 @@ continuous sounds (chugging, steps, ticks) far below it.
 
 **10. You cannot hear the result, so measure it and then ask.** Compare loudness, draw the waveform,
 transcribe the mix, then ask the user to listen and name the second that sounds wrong.
+
+**18. Drive a mouth, or any repeating visual, from the real amplitude of the rendered audio,
+not a fixed loop.**
+- Evidence: a talking actor's mouth used to flap on a constant 0.34 s metronome, open half the time
+  regardless of what was being said. Reading the actual narration WAV's loudness (24 samples a
+  second, smoothed) and opening the mouth in proportion made it visibly open wider on stressed
+  words and close between them, confirmed on cropped frames of real Kokoro audio. Costs nothing
+  extra to compute (the WAV already exists); falls back to the old flap when there is no audio yet
+  (a layout preview).
+
+**19. Highlight the word a caption is saying, from the same word timing already used for cues.**
+- Evidence: burned-in subtitles showed a whole sentence with no indication of where the narration
+  currently was. The word spans (built once per sentence, not every frame) and highlight add about
+  70 characters of script-reading cost and were confirmed against real Kokoro audio; the bolded word
+  visibly tracks the narration in a cropped-frame check.
 
 ## Process
 

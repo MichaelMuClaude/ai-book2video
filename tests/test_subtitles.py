@@ -55,6 +55,30 @@ class TimedCueTests(unittest.TestCase):
         self.assertAlmostEqual(cues[1].start, 0.95, places=2)
         self.assertIn(["1884", 1.1], cues[1].words)
 
+class DisplayWordsTests(unittest.TestCase):
+    def test_tokens_keep_original_spelling_and_get_real_times(self):
+        spoken = [["the", 0.1, 0.2], ["classmate", 0.2, 0.6], ["pulls", 0.6, 0.8], ["out", 0.8, 0.9], ["a", 0.9, 0.95],
+                  ["pocket", 0.95, 1.2], ["knife", 1.2, 1.5]]
+        caps = subtitles.display_words("The classmate pulls out a pocket knife.".split(), spoken, 0.0, 1.6)
+        self.assertEqual([c[0] for c in caps], ["The", "classmate", "pulls", "out", "a", "pocket", "knife."])
+        self.assertEqual(caps[0][1], 0.1)
+        self.assertEqual(caps[6][1], 1.2)
+
+    def test_an_unmatched_middle_token_is_interpolated(self):
+        spoken = [["a", 0.0, 0.1], ["c", 1.0, 1.1]]
+        caps = subtitles.display_words(["a", "b", "c"], spoken, 0.0, 1.2)
+        self.assertEqual(caps[0][1], 0.0)
+        self.assertEqual(caps[2][1], 1.0)
+        self.assertTrue(0.0 < caps[1][1] < 1.0)
+
+    def test_timed_cues_fills_in_captions_on_the_real_path(self):
+        cues = subtitles.timed_cues(["The classmate pulls out a pocket knife."], ["他拿出小刀。"], self.SPOKEN_KNIFE, 0.0, 2.3)
+        self.assertEqual(len(cues[0].captions), 7)
+        self.assertEqual(cues[0].captions[0][0], "The")
+
+    SPOKEN_KNIFE = [["The", 0.0, 0.1], ["classmate", 0.1, 0.5], ["pulls", 0.5, 0.7], ["out", 0.7, 0.8], ["a", 0.8, 0.85],
+                    ["pocket", 0.85, 1.1], ["knife", 1.1, 1.4]]
+
 
 if __name__ == "__main__":
     unittest.main()

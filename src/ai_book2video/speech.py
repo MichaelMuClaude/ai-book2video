@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shlex
 import shutil
+import struct
 import subprocess
+import wave
 from pathlib import Path
 
 from ai_book2video.errors import Book2VideoError
+
+ENVELOPE_RATE = 24  # samples a second: enough to move a mouth, small enough to embed in the page
 
 BACKENDS = ("kokoro", "espeak", "command")
 KOKORO_PYTHON = os.environ.get("KOKORO_PYTHON", str(Path.home() / ".venvs" / "kokoro" / "bin" / "python"))
@@ -69,3 +74,37 @@ def duration(path: Path) -> float:
     if probe.returncode != 0:
         raise Book2VideoError(f"ffprobe failed on {path}: {probe.stderr.strip()}")
     return float(json.loads(probe.stdout)["format"]["duration"])
+
+
+def amplitude_envelope(wav: Path, rate: int = ENVELOPE_RATE) -> list[float]:
+    """Loudness of `wav` over time, one 0-1 value per 1/rate seconds (root-mean-square per window,
+    normalised to its own peak, light smoothing, silence floors to 0). Used to open a talking
+    actor's mouth in proportion to how loud the narration actually is at that instant, instead of a
+    fixed flap. Mono or stereo 16-bit PCM; anything else returns an empty envelope (the caller falls
+    back to the old flap)."""
+    try:
+        with wave.open(str(wav), "rb") as handle:
+            if handle.getsampwidth() != 2:
+                return []
+            channels = handle.getnchannels()
+            framerate = handle.getframerate()
+            raw = handle.readframes(handle.getnframes())
+    except (OSError, wave.Error):
+        return []
+    if not raw:
+        return []
+    samples = struct.unpack(f"<{len(raw) // 2}h", raw)
+    window = max(1, int(framerate / rate))
+    levels = []
+    for start in range(0, len(samples), window * channels):
+        chunk = samples[start : start + window * channels]
+        if not chunk:
+            break
+        levels.append(math.sqrt(sum(v * v for v in chunk) / len(chunk)) / 32768)
+    peak = max(levels, default=0.0) or 1.0
+    levels = [v / peak for v in levels]
+    smoothed = []  # a short rise/fall rather than a jittery bar, closer to how a mouth actually moves
+    for i, v in enumerate(levels):
+        window_vals = levels[max(0, i - 1) : i + 2]
+        smoothed.append(sum(window_vals) / len(window_vals))
+    return [round(v, 3) for v in smoothed]
