@@ -8,6 +8,8 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **Actions land on the words**: an action can be timed to a narration sentence (`"at": "s2"`), so the car hits exactly when the narrator says it does.
 - **Natural English narration** with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), an open model that runs locally on your GPU. espeak-ng works as a fallback.
 - **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
+- **Sound effects made in code** (`--sfx`): bangs, thuds, train whistles and chugs, footsteps, ticking clocks, pops and whooshes, synthesised from tones and noise and timed to the action. No sound files to download or license.
+- **Learn a style from a reference** (`analyze-ref`): measure a video or picture you like (cuts, shot lengths, colours, motion), get a contact sheet and starter colour palettes, and give the book its own look with a `palettes` list.
 
 The tool does the mechanical work. The scene script (what each scene shows and what the narrator says) is written by Claude or by hand, as JSON. See `SKILL.md` for the full workflow Claude follows.
 
@@ -21,8 +23,12 @@ ai-book2video section book.json s03                    # read one section (add -
 # write chapter3.script.json (see the format below)
 ai-book2video validate chapter3.script.json            # check it, including the English/Chinese sentence pairs
 ai-book2video preview chapter3.script.json -o preview  # three frames per scene, to check layout and motion
-ai-book2video build chapter3.script.json -o chapter3.mp4   # narration, frames, MP4 and SRT
+ai-book2video build chapter3.script.json -o sample.mp4 --scenes 1,14,30 --sfx   # sample a few scenes first
+ai-book2video build chapter3.script.json -o chapter3.mp4 --sfx   # narration, frames, sound, MP4 and SRT
+ai-book2video analyze-ref liked-video.mp4              # pacing, colours and motion of a style to follow
 ```
+
+Render a sample of two or three scenes (the hook, the busiest scene, a quiet one) before the full chapter: a sample takes about a minute, so the look and the sound are cheap to fix there.
 
 Try the example first:
 
@@ -96,6 +102,8 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 | actor `label`, `colour` | a short name above the head; a body colour |
 | prop `type` | `car`, `train` (move with `to`; `armoured`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`), `letter` (`y`, `to`), `clock` (`spin`, `at`, `dur`), `wall` (`w`, `h`), `crate` (`text`), `chair`, `easel` |
 | `camera` | `true` by default: a new shot on every sentence |
+| `palettes` (top level) | colour sets scenes take in turn: `[{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}]`; text colours are chosen for contrast |
+| prop or actor `sfx` | with `--sfx`: `impact`, `chime`, `sad`, `question`, `pop` or `none` (otherwise chosen from the action or the burst's word) |
 
 `x` positions are on a 0–1920 scale across the stage (they are fitted to the portrait frame); keep actors between about 250 and 1650. `y` is in pixels from the top. Times are seconds, or a sentence reference: `"s2"` is the start of sentence 2, `"s2+0.5"` half a second later.
 
@@ -122,9 +130,15 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 - `src/ai_book2video/capture.mjs`: headless Chrome frame capture (DevTools protocol)
 - `src/ai_book2video/speech.py`, `tts_kokoro.py`: narration with Kokoro, espeak-ng or a custom command
 - `src/ai_book2video/subtitles.py`: sentence splitting, bilingual cues and SRT
-- `src/ai_book2video/video.py`: clips per scene, joined into the final MP4
+- `src/ai_book2video/sfx.py`: sound effects synthesised in code and placed on the action
+- `src/ai_book2video/reference.py`: reference analysis (cuts, shot lengths, colours, motion, contact sheet)
+- `src/ai_book2video/video.py`: clips per scene, rendered in parallel and joined into the final MP4
 - `src/ai_book2video/cli.py`: the `ai-book2video` commands
 - `examples/tortoise-and-hare.script.json`: a public-domain example (Aesop)
+
+## Acknowledgements
+
+Two habits here were learned from [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video, and make sound effects in code instead of fetching sound files. The reference analysis follows its idea of studying a liked video shot by shot. No code was copied; the ideas were.
 
 ## Licence
 

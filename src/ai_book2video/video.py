@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_book2video import motion, speech, subtitles
+from ai_book2video import motion, sfx, speech, subtitles
 from ai_book2video.browser import find_chrome, find_node
 from ai_book2video.errors import Book2VideoError
 from ai_book2video.script import Script, Scene
@@ -20,6 +20,7 @@ CAPTURE = HERE / "capture.mjs"
 FPS = 30
 MIN_SCENE_SECONDS = 4.0
 TAIL_SECONDS = 0.8
+SFX_VOLUME = 1.0  # multiplies the built-in sound effect levels (sfx.LEVELS)
 DEFAULT_JOBS = max(1, min(4, (os.cpu_count() or 4) // 8))  # scenes rendered at the same time; kept low so the CPU stays cool
 
 
@@ -89,13 +90,21 @@ def nvenc_available() -> bool:
     return probe.returncode == 0
 
 
-def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path, encoder: str = "cpu") -> None:
+def encode_scene(frames_dir: Path, wav: Path, seconds: float, out: Path, encoder: str = "cpu",
+                 effects: Path | None = None, effects_volume: float = SFX_VOLUME) -> None:
+    audio_inputs = ["-i", str(wav)]
+    mix = "[1:a]apad,atrim=0:" + f"{seconds:.3f}" + "[a]"
+    if effects is not None:
+        # Narration on top, code-made sound effects quietly underneath.
+        audio_inputs += ["-i", str(effects)]
+        mix = (f"[1:a]apad,atrim=0:{seconds:.3f}[n];[2:a]apad,atrim=0:{seconds:.3f},volume={effects_volume:.3f}[s];"
+               "[n][s]amix=inputs=2:duration=first:normalize=0[a]")
     result = subprocess.run(
         [
             require_ffmpeg(), "-y", "-loglevel", "error",
             "-framerate", str(FPS), "-i", str(frames_dir / "f%05d.jpg"),
-            "-i", str(wav),
-            "-filter_complex", "[1:a]apad,atrim=0:" + f"{seconds:.3f}" + "[a]",
+            *audio_inputs,
+            "-filter_complex", mix,
             "-map", "0:v", "-map", "[a]",
             "-t", f"{seconds:.3f}",
             "-vf", "format=yuv420p",
@@ -136,6 +145,8 @@ def build(
     keep_frames: bool = False,
     jobs: int = DEFAULT_JOBS,
     encoder: str = "cpu",
+    effects: bool = False,
+    effects_volume: float = SFX_VOLUME,
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
@@ -170,24 +181,30 @@ def build(
         page = pages_dir / f"scene{scene.index:03d}.html"
         local_cues = scene_cues(scene, 0.0, spoken)
         page.write_text(
-            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter),
+            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter,
+                              script.palettes),
             encoding="utf-8",
         )
         clip = clips_dir / f"scene{scene.index:03d}.mp4"
-        jobs_list.append((scene, page, wav, seconds, clip))
+        effects_wav = None
+        if effects:
+            events = sfx.scene_events(scene, cue_rows(local_cues), seconds, last=scene is scenes[-1])
+            if events:
+                effects_wav = sfx.render(events, seconds, audio_dir / f"scene{scene.index:03d}.sfx.wav")
+        jobs_list.append((scene, page, wav, seconds, clip, effects_wav))
         clip_paths.append(clip)
         timings.append(SceneTiming(scene.index, round(spoken, 2), round(seconds, 2), round(cursor, 2)))
         cues.extend(subtitles.Cue(cue.start + cursor, cue.end + cursor, cue.text, cue.zh) for cue in local_cues)
         cursor += seconds
 
     def render(job) -> None:
-        scene, page, wav, seconds, clip = job
+        scene, page, wav, seconds, clip, effects_wav = job
         frames_dir = workdir / "frames" / f"scene{scene.index:03d}"
         if frames_dir.exists():
             shutil.rmtree(frames_dir)
         times = [i / FPS for i in range(max(1, round(seconds * FPS)))]
         capture_frames(page, frames_dir, times)
-        encode_scene(frames_dir, wav, seconds, clip, encoder)
+        encode_scene(frames_dir, wav, seconds, clip, encoder, effects_wav, effects_volume)
         if not keep_frames:
             shutil.rmtree(frames_dir, ignore_errors=True)
 
@@ -210,6 +227,7 @@ def build(
         "tts": tts,
         "orientation": "portrait 1080x1920",
         "encoder": encoder,
+        "sound_effects": effects,
         "scenes": [timing.__dict__ for timing in timings],
     }
     (workdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -229,7 +247,8 @@ def preview(script: Script, outdir: Path, only: set[int] | None = None) -> list[
         page = outdir / f"scene{scene.index:03d}.html"
         cues = scene_cues(scene, 0.0, max(1.0, seconds - TAIL_SECONDS))
         page.write_text(
-            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(cues), script.book, script.chapter),
+            motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(cues), script.book, script.chapter,
+                              script.palettes),
             encoding="utf-8",
         )
         frames = outdir / f"scene{scene.index:03d}"

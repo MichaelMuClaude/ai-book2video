@@ -30,6 +30,8 @@ from ai_book2video.text import count_words
 KINDS = ("title", "text", "bullets", "quote", "stat", "stage")
 PROPS = ("car", "train", "tree", "sun", "fire", "building", "podium", "book", "burst", "letter", "clock", "wall", "crate", "chair", "easel")
 BACKGROUNDS = ("street", "field", "room", "plain", "night")
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+PALETTE_KEYS = ("bg", "accent", "card")  # required; "ink" and "card_ink" are worked out for contrast when missing
 WORDS_PER_MINUTE = 150
 MAX_NARRATION_WORDS = 220
 WARN_NARRATION_WORDS = 170
@@ -73,6 +75,7 @@ class Script:
     warnings: list[str] = field(default_factory=list)
     book: str = ""
     chapter: str = ""
+    palettes: list[dict] = field(default_factory=list)
 
     @property
     def seconds_estimate(self) -> float:
@@ -91,6 +94,21 @@ def check(raw: dict) -> tuple[list[str], list[str]]:
         return ["the script must be a JSON object"], []
     if not str(raw.get("title", "")).strip():
         errors.append("missing top-level 'title'")
+    palettes = raw.get("palettes")
+    if palettes is not None:
+        if not isinstance(palettes, list) or not palettes:
+            errors.append("'palettes' must be a non-empty list of colour sets")
+        else:
+            for number, palette in enumerate(palettes, start=1):
+                if not isinstance(palette, dict):
+                    errors.append(f"palette {number}: must be an object")
+                    continue
+                for key in PALETTE_KEYS:
+                    if not HEX.match(str(palette.get(key, ""))):
+                        errors.append(f"palette {number}: '{key}' must be a colour like #1b1b3a")
+                for key in ("ink", "card_ink"):
+                    if key in palette and not HEX.match(str(palette[key])):
+                        errors.append(f"palette {number}: '{key}' must be a colour like #ffffff")
     scenes = raw.get("scenes")
     if not isinstance(scenes, list) or not scenes:
         errors.append("'scenes' must be a non-empty list")
@@ -207,4 +225,5 @@ def load(path: Path) -> Script:
         warnings=warnings,
         book=str(raw.get("book", "")).strip(),
         chapter=str(raw.get("chapter", "")).strip(),
+        palettes=[dict(palette) for palette in raw.get("palettes") or []],
     )

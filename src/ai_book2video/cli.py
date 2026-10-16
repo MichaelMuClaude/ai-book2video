@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ai_book2video import __version__, browser, ingest, motion, script as scripts, speech, video
+from ai_book2video import __version__, browser, ingest, motion, reference, script as scripts, speech, video
 from ai_book2video.errors import Book2VideoError
 
 
@@ -109,12 +109,25 @@ def cmd_build(args: argparse.Namespace) -> int:
         keep_frames=args.keep_frames,
         jobs=args.jobs,
         encoder=args.encoder,
+        effects=args.sfx,
+        effects_volume=args.sfx_volume,
     )
     minutes, seconds = divmod(manifest["seconds"], 60)
     print(f"wrote {out}  ({int(minutes)} min {seconds:04.1f} s, {len(manifest['scenes'])} scenes)")
     if manifest["subtitles"]:
         print(f"subtitles: {manifest['subtitles']}")
     print(f"working files: {workdir}")
+    return 0
+
+
+def cmd_analyze_ref(args: argparse.Namespace) -> int:
+    source = Path(args.reference)
+    out = Path(args.output) if args.output else source.with_name(source.stem + "-reference")
+    report = reference.analyze(source, out, threshold=args.threshold)
+    print((out / "reference.md").read_text(encoding="utf-8"), end="")
+    print(f"\nwrote {out / 'reference.md'} and {out / 'reference.json'}")
+    if report["contact_sheet"]:
+        print(f"look at the contact sheet: {report['contact_sheet']}")
     return 0
 
 
@@ -180,6 +193,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="output .mp4")
     p.add_argument("--work", help="working folder (default: the output name without .mp4)")
     p.add_argument("--keep-frames", action="store_true", help="keep the captured frame images in the working folder")
+    p.add_argument("--sfx", action="store_true",
+                   help="add sound effects made in code (bursts, falls, trains, footsteps, scene wipes) under the narration")
+    p.add_argument("--sfx-volume", type=float, default=video.SFX_VOLUME, help=f"sound effect level (default {video.SFX_VOLUME})")
     p.add_argument("--encoder", choices=video.ENCODERS, default="cpu",
                    help="video encoder: cpu (libx264) or nvenc (NVIDIA GPU, frees the CPU for frame capture)")
     p.add_argument("--jobs", type=int, default=video.DEFAULT_JOBS,
@@ -191,6 +207,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scenes", help="render only these scenes, e.g. 1-3 (for a quick preview)")
     p.add_argument("--no-subtitles", action="store_true")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("analyze-ref", help="measure a reference video or picture (pacing, colours, motion) to copy its style")
+    p.add_argument("reference", help="a video or a picture whose style you want to follow")
+    p.add_argument("-o", "--output", help="folder for the report and contact sheet (default: <name>-reference next to it)")
+    p.add_argument("--threshold", type=float, default=0.3, help="how big a change counts as a cut, 0-1 (default 0.3)")
+    p.set_defaults(func=cmd_analyze_ref)
 
     p = sub.add_parser("doctor", help="check the tools this needs")
     p.set_defaults(func=cmd_doctor)

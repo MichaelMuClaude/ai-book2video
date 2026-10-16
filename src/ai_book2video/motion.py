@@ -523,13 +523,37 @@ def _stage(scene: Scene, duration: float, palette: dict, cues: list | None = Non
 TEMPLATES = {"title": _title, "text": _text, "bullets": _bullets, "quote": _quote, "stat": _stat, "stage": _stage}
 
 
-def _pick(scene: Scene, index: int) -> dict:
+def _luminance(colour: str) -> float:
+    channels = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _readable_on(colour: str) -> str:
+    """Near-black or white, whichever has more contrast on the colour."""
+    lum = _luminance(colour)
+    return "#111111" if (lum + 0.05) / 0.05 > 1.05 / (lum + 0.05) else "#ffffff"
+
+
+def complete_palette(palette: dict) -> dict:
+    """Fill in text colours for a custom palette from a script's "palettes" list."""
+    full = dict(palette)
+    full.setdefault("ink", _readable_on(full["bg"]))
+    full.setdefault("card_ink", _readable_on(full["card"]))
+    return full
+
+
+def _pick(scene: Scene, index: int, palettes: list[dict] | None = None) -> dict:
+    if palettes:
+        return complete_palette(palettes[0] if scene.kind == "title" else palettes[index % len(palettes)])
     return PALETTES[0] if scene.kind == "title" else PALETTES[index % len(PALETTES)]
 
 
-def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list | None = None, book: str = "", chapter: str = "") -> str:
-    """Full HTML page for one scene. `cues` is a list of [start, end, english, chinese] in scene seconds."""
-    palette = _pick(scene, index)
+def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list | None = None, book: str = "", chapter: str = "",
+               palettes: list[dict] | None = None) -> str:
+    """Full HTML page for one scene. `cues` is a list of [start, end, english, chinese] in scene seconds.
+    `palettes` replaces the built-in colour sets (scenes take them in turn)."""
+    palette = _pick(scene, index, palettes)
     if scene.kind == "stage":
         body, timeline = _stage(scene, duration, palette, cues)
     else:

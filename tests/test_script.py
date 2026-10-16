@@ -79,5 +79,30 @@ class CheckTests(unittest.TestCase):
                 script.load(path)
 
 
+class PaletteTests(unittest.TestCase):
+    def test_custom_palettes_load_and_fill_text_colours(self):
+        from ai_book2video import motion
+        raw = json.loads(json.dumps(GOOD))
+        raw["palettes"] = [{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}]
+        errors, _ = script.check(raw)
+        self.assertEqual(errors, [])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "s.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            loaded = script.load(path)
+        self.assertEqual(loaded.palettes[0]["bg"], "#fff3d6")
+        full = motion.complete_palette(loaded.palettes[0])
+        self.assertEqual(full["ink"], "#111111")  # dark text on a light background
+        self.assertEqual(full["card_ink"], "#ffffff")
+        page = motion.scene_page(loaded.scenes[2], 3, "Demo", 5.0, palettes=loaded.palettes)
+        self.assertIn("#fff3d6", page)
+
+    def test_bad_palette_colour_is_an_error(self):
+        raw = json.loads(json.dumps(GOOD))
+        raw["palettes"] = [{"bg": "red", "accent": "#7c3aed", "card": "#1b1b3a"}]
+        errors, _ = script.check(raw)
+        self.assertTrue(any("palette 1: 'bg'" in e for e in errors))
+
+
 if __name__ == "__main__":
     unittest.main()
