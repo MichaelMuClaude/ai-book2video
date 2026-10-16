@@ -540,14 +540,19 @@ def _actor(prefix: str, index: int, spec: dict, palette: dict, tl: Timeline) -> 
     return html_
 
 
-def _stage(scene: Scene, duration: float, palette: dict, cues: list | None = None, camera: str = "director") -> tuple[str, Timeline]:
-    """Stick-figure stage. SVG by default (colourful, hand-drawn look); "style": "html" uses the old divs."""
+def _stage(scene: Scene, duration: float, palette: dict, cues: list | None = None, camera: str = "director",
+          style: str = "stick") -> tuple[str, Timeline]:
+    """A stage scene's picture. `style` ("stick" or "collage", from the script) picks the renderer;
+    a stage's own "style": "html" overrides it with the old plain divs (pre-SVG scenes)."""
     spec = scene.stage or {}
     if spec.get("style", "svg") != "html":
-        from ai_book2video import svgstage
+        if style == "collage":
+            from ai_book2video import collage as engine
+        else:
+            from ai_book2video import svgstage as engine
 
         tl = Timeline()
-        svg = svgstage.stage(scene, palette, tl, cues or [], duration, camera)
+        svg = engine.stage(scene, palette, tl, cues or [], duration, camera)
         heading = ""
         if scene.heading:
             size = _heading_size(scene.heading, big=110, mid=92, small=76)
@@ -602,12 +607,12 @@ def _pick(scene: Scene, index: int, palettes: list[dict] | None = None) -> dict:
 
 def scene_page(scene: Scene, index: int, title: str, duration: float, cues: list | None = None, book: str = "", chapter: str = "",
                palettes: list[dict] | None = None, camera: str = "director", voice: list[float] | None = None,
-               voice_rate: int = 24) -> str:
+               voice_rate: int = 24, style: str = "stick") -> str:
     """Full HTML page for one scene. `cues` is a list of [start, end, english, chinese] in scene seconds.
     `palettes` replaces the built-in colour sets (scenes take them in turn)."""
     palette = _pick(scene, index, palettes)
     if scene.kind == "stage":
-        body, timeline = _stage(scene, duration, palette, cues, camera)
+        body, timeline = _stage(scene, duration, palette, cues, camera, style)
     else:
         body, timeline = TEMPLATES[scene.kind](scene, duration, palette)
     return _wrapper_page(palette, body, timeline, duration, title, cues=cues, book=book, chapter=chapter, voice=voice, voice_rate=voice_rate)

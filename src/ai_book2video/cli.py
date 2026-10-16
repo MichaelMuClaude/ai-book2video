@@ -84,7 +84,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 def cmd_preview(args: argparse.Namespace) -> int:
     script = scripts.load(Path(args.script))
     out = Path(args.output)
-    frames = video.preview(script, out, only=parse_scenes(args.scenes), camera=args.camera)
+    frames = video.preview(script, out, only=parse_scenes(args.scenes), camera=args.camera, style=args.style)
     print(f"wrote {len(frames)} preview frames to {out}")
     return 0
 
@@ -111,6 +111,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         encoder=args.encoder,
         effects=args.sfx,
         camera=args.camera,
+        style=args.style,
         loudness=None if args.loudness == 0 else args.loudness,
         music_mood=None if args.music in (None, "none") else args.music,
         music_level=args.music_level,
@@ -205,6 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("script")
     p.add_argument("-o", "--output", default="preview")
     p.add_argument("--scenes", help="e.g. 1,3,5-7")
+    p.add_argument("--style", choices=("stick", "collage"), help="visual style (overrides the script's \"style\")")
     p.add_argument("--camera", choices=("classic", "director"), help="camera style (overrides the script's \"camera\")")
     p.set_defaults(func=cmd_preview)
 
@@ -213,6 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="output .mp4")
     p.add_argument("--work", help="working folder (default: the output name without .mp4)")
     p.add_argument("--keep-frames", action="store_true", help="keep the captured frame images in the working folder")
+    p.add_argument("--style", choices=("stick", "collage"), help="visual style (overrides the script's \"style\")")
     p.add_argument("--camera", choices=("classic", "director"),
                    help="camera style for every stage scene (overrides the script's \"camera\"): classic moves to the next "
                         "framing on every sentence; director picks the move for what each sentence shows")

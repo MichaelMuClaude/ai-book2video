@@ -10,6 +10,7 @@ Turn a book chapter (or any Markdown document) into a fun, animated, narrated **
 - **Bilingual subtitles**: each English sentence is shown with its Chinese translation, burned into the video and also written as an SRT file.
 - **Timed to the voice**: subtitles start when each sentence is actually spoken, from Kokoro's word timings, and actions can land on a word (`"at": "w:knife"`). The English caption highlights the word being said as it is said.
 - **A mouth driven by the real narration**: a `"talk"` actor's mouth opens with the synthesised voice's actual loudness, not a fixed flap.
+- **Two visual styles, picked per book, not per scene**: `stick` (the crayon stick-figure stage) and `collage` (torn paper, sepia photo-cutout figures, letters with a wax seal, newspaper-headline bursts). `"style": "collage"` at the top of a script, or `--style collage`. Both share the same script format, camera, faces, actions and timing engine — only the drawing differs — so a book's existing scripts work in either style without being rewritten.
 - **A director camera** (default): it chooses the move for each sentence (hold, ease in, glide, pull back, or a fast push on an impact) instead of repeating one move. `"camera": "classic"` brings back the original cut-every-sentence style.
 - **Checked with numbers** (`check`): motion per scene, frozen stretches, jumps, blank frames, silent scenes and loudness, before anyone watches. The finished film is levelled to -16 LUFS.
 - **Background music made in code** (`--music calm|reflective|tense`): a pad, bass and plucked arpeggio on a four-chord progression, looped seamlessly under the film, kept well below the voice and ducked further whenever the narrator speaks.
@@ -110,6 +111,7 @@ The first run downloads the Kokoro model (about 330 MB) from Hugging Face. Set `
 | actor `label`, `colour` | a short name above the head; a body colour |
 | prop `type` | `car`, `train` (move with `to`; `armoured`), `tree`, `sun`, `fire`, `building` (`w`, `h`), `podium`, `book`, `burst` (`text`, `at`), `letter` (`y`, `to`), `clock` (`spin`, `at`, `dur`), `wall` (`w`, `h`), `crate` (`text`), `chair`, `easel` |
 | `camera` | top level, per stage or `--camera`: `director` (default; the move fits what each sentence shows), `classic` (a new framing on every sentence), or `false` on a stage |
+| `style` (top level) or `--style` | `stick` (default, crayon stick figures) or `collage` (torn-paper cutouts); set once for the whole book |
 | timing (`at`) | seconds, `"s2+0.5"` (sentence start), or `"w:knife"` (when that word is said; `#2` for the second time) |
 | `palettes` (top level) | colour sets scenes take in turn: `[{"bg": "#fff3d6", "accent": "#7c3aed", "card": "#1b1b3a"}]`; text colours are chosen for contrast |
 | prop or actor `sfx` | with `--sfx`: `impact`, `chime`, `sad`, `question`, `pop` or `none` (otherwise chosen from the action or the burst's word) |
@@ -135,7 +137,8 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 - `src/ai_book2video/ingest.py`: Markdown or text to sections (CJK-aware word counts)
 - `src/ai_book2video/script.py`: scene script format and validation
 - `src/ai_book2video/motion.py`: page templates, the timeline engine and bilingual captions
-- `src/ai_book2video/svgstage.py`: the SVG stick-figure stage, faces, props, camera and sentence timing
+- `src/ai_book2video/svgstage.py`: the SVG stick-figure stage ("stick" style), faces, props, camera and sentence timing
+- `src/ai_book2video/collage.py`: the torn-paper stage ("collage" style), reusing the camera and skeleton from svgstage.py
 - `src/ai_book2video/capture.mjs`: headless Chrome frame capture (DevTools protocol)
 - `src/ai_book2video/speech.py`, `tts_kokoro.py`: narration with Kokoro, espeak-ng or a custom command
 - `src/ai_book2video/subtitles.py`: sentence splitting, bilingual cues and SRT
@@ -153,7 +156,7 @@ We learn from other people's good work and say so. No code was copied; the ideas
 
 - [chengfeng-video-styles](https://github.com/Agentchengfeng/chengfeng-video-styles) by 成峰: render a short sample before the full video; make sound effects in code instead of fetching sound files; study a liked video shot by shot.
 - [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) by 花叔 (MIT): the camera rules behind the director camera (hold when the picture moves, fast moves only for accents, every push answered); cues that name a word instead of a second; measuring the finished film before delivery and failing slide-like scenes; independent review that checks facts as well as pictures; and keeping a lessons file with evidence.
-- [anything2video](https://github.com/2021291696/anything2video) (MIT), whose audio engine comes from [mg-styles-15](https://github.com/Vincentwei1021/mg-styles-15) and whose motion-card gallery comes from [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft) (Apache-2.0): background music made in code with a mood per style, kept under the voice and ducked; sound placed by its sync point (a hit one frame early so it reads on the frame, a whoosh peaking as the movement crosses); a bright two-tone edge on a wipe transition, or it reads as a slide deck; and careful credit for every borrowed piece.
+- [anything2video](https://github.com/2021291696/anything2video) (MIT), whose audio engine comes from [mg-styles-15](https://github.com/Vincentwei1021/mg-styles-15) and whose motion-card gallery comes from [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft) (Apache-2.0): background music made in code with a mood per style, kept under the voice and ducked; sound placed by its sync point (a hit one frame early so it reads on the frame, a whoosh peaking as the movement crosses); a bright two-tone edge on a wipe transition, or it reads as a slide deck; the idea that a video's whole look can be a named, lockable style that a book picks once (our `collage` style, built fresh around our own stick-figure skeleton and camera, not their renderer or their 61 cards); and careful credit for every borrowed piece.
 - [Remotion](https://github.com/remotion-dev/remotion) (its own licence, not used as a dependency — see `LESSONS.md`): the idea of driving a mouth or a visual from the real amplitude of the rendered audio instead of a fixed loop, and of highlighting the word a caption is currently saying from word-level timing.
 
 ## Licence

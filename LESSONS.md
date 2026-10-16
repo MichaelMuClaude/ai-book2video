@@ -112,6 +112,33 @@ put it one frame early; a whoosh is heard at its peak, so centre it on the momen
 crosses the frame.
 - From anything2video's audio engine (MIT).
 
+**22. A second visual style can reuse the whole skeleton, camera and script format — only the
+drawing changes.** anything2video's own sand/ink/collage cards make this same choice (see entry 2);
+our `collage` style is the first time we did it ourselves, for a style of our own design, not theirs.
+- Evidence: `collage.py` imports svgstage's camera (`_camera`, `_director`, `_aim`), skeleton
+  geometry (leg/arm swing, blink timing, `actor_x`) and constants unchanged, and only replaces how a
+  figure, a prop and the background are drawn. A real chapter-2 scene rendered in both styles with
+  no script changes; `check` passed both at the same loudness and similar motion.
+- A `"style"` field sits at the top of the script next to `"camera"` and `"music"`: a book picks one
+  style for all its chapters, not a style per scene, because the point is a consistent look across a
+  video, the same reason `"camera"` and `"music"` are top-level choices too.
+
+**23. An SVG element with `data-id` must never also carry its own `transform=` attribute — the
+second time this exact bug was made and fixed in this project.** The engine writes
+`el.style.transform` for every `data-id` element on every frame, including elements with no position
+animation at all (the identity transform `translate(0px, 0px) rotate(0deg) scale(1) ...`), and a CSS
+`transform` always overrides an SVG `transform` *attribute* on the same element, even when the CSS
+value is the identity. The element silently snaps to `(0, 0)`.
+- Evidence: `collage.py`'s face wrapped its eyes and mouth in `<g data-id="..." transform="translate(0 -332)">`;
+  the head rendered at the origin with the photo and eyes invisible or mispositioned, confirmed on a
+  cropped frame. svgstage.py had already hit and fixed the same bug once (its mouth and eye shapes
+  use absolute coordinates with no wrapping transform, for exactly this reason) — the rule was not
+  carried over when writing the second renderer. Fixed by baking the offset into each shape's own
+  coordinates instead of a wrapping transform, and added a regression test
+  (`test_collage.py::TransformAttributeRegressionTests`) that scans both renderers' output for any
+  `data-id` element that also has a `transform` attribute, so a third repeat fails the test suite
+  instead of a cropped frame.
+
 ## Process
 
 **11. Render a sample before the full chapter.** Two or three scenes: the hook, the busiest scene,

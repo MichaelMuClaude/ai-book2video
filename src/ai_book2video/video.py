@@ -266,6 +266,7 @@ def build(
     loudness: float | None = LOUDNESS,
     music_mood: str | None = None,
     music_level: float = MUSIC_LEVEL,
+    style: str | None = None,
 ) -> dict:
     """Render the video. Returns the manifest (also written to workdir/manifest.json)."""
     require_ffmpeg()
@@ -303,7 +304,8 @@ def build(
         voice_env = speech.amplitude_envelope(wav) if has_talker(scene) else None
         page.write_text(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(local_cues), script.book, script.chapter,
-                              script.palettes, camera or script.camera, voice_env, speech.ENVELOPE_RATE),
+                              script.palettes, camera or script.camera, voice_env, speech.ENVELOPE_RATE,
+                              style or script.style),
             encoding="utf-8",
         )
         clip = clips_dir / f"scene{scene.index:03d}.mp4"
@@ -352,6 +354,7 @@ def build(
         "encoder": encoder,
         "sound_effects": effects,
         "camera": camera or script.camera,
+        "style": style or script.style,
         "loudness": levels,
         "music": mood,
         "scenes": [timing.__dict__ for timing in timings],
@@ -360,7 +363,8 @@ def build(
     return manifest
 
 
-def preview(script: Script, outdir: Path, only: set[int] | None = None, camera: str | None = None) -> list[Path]:
+def preview(script: Script, outdir: Path, only: set[int] | None = None, camera: str | None = None,
+            style: str | None = None) -> list[Path]:
     """Render three key frames per scene (early, middle, late) as JPEG files, for a quick look."""
     find_node()
     find_chrome()
@@ -374,7 +378,7 @@ def preview(script: Script, outdir: Path, only: set[int] | None = None, camera: 
         cues = scene_cues(scene, 0.0, max(1.0, seconds - TAIL_SECONDS))
         page.write_text(
             motion.scene_page(scene, scene.index, script.title, seconds, cue_rows(cues), script.book, script.chapter,
-                              script.palettes, camera or script.camera),
+                              script.palettes, camera or script.camera, style=style or script.style),
             encoding="utf-8",
         )
         frames = outdir / f"scene{scene.index:03d}"
